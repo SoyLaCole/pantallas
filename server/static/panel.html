@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pantallas La Cole</title>
+<link rel="icon" href="/static/icon.png">
+<style>
+:root{--p:#800cab;--p2:#5e0880;--pl:#f6eefb;--bg:#f5f4f7;--card:#fff;--tx:#23202a;--mut:#6d6877;--bd:#e4e0ea;--ok:#1f9d55;--warn:#d98a00;--bad:#c62828}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px}
+header{background:var(--p);color:#fff;display:flex;align-items:center;gap:16px;padding:10px 22px;position:sticky;top:0;z-index:5}
+header img{height:38px}
+header h1{font-size:18px;margin:0;font-weight:700;flex:1}
+header .me{font-size:12px;opacity:.9}
+header a{color:#fff;font-size:12px;opacity:.85}
+nav{display:flex;gap:4px;padding:14px 22px 0;max-width:1200px;margin:auto}
+nav button{border:0;background:none;padding:10px 18px;font-size:14px;font-weight:600;color:var(--mut);cursor:pointer;border-bottom:3px solid transparent}
+nav button.on{color:var(--p);border-color:var(--p)}
+main{max-width:1200px;margin:auto;padding:16px 22px 60px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}
+.btn{border:1px solid var(--bd);background:#fff;border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;color:var(--tx)}
+.btn:hover{border-color:var(--p);color:var(--p)}
+.btn.pri{background:var(--p);border-color:var(--p);color:#fff}
+.btn.pri:hover{background:var(--p2);color:#fff}
+.btn.bad{color:var(--bad)}.btn.bad:hover{border-color:var(--bad);color:var(--bad)}
+.btn.sm{padding:4px 8px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:default}
+.row{display:flex;align-items:center;gap:8px}
+.sp{flex:1}
+h2{font-size:16px;margin:18px 0 10px}
+.dot{width:10px;height:10px;border-radius:50%;background:#bbb;flex:none}
+.dot.on{background:var(--ok);box-shadow:0 0 0 3px #1f9d5530}
+.scr h3{margin:0;font-size:16px}
+.kv{display:grid;grid-template-columns:90px 1fr;gap:3px 8px;margin:12px 0;font-size:13px}
+.kv span:nth-child(odd){color:var(--mut)}
+.badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;background:var(--pl);color:var(--p)}
+.badge.ok{background:#e3f6ea;color:var(--ok)}.badge.warn{background:#fff3d6;color:var(--warn)}
+.badge.bad{background:#fde7e7;color:var(--bad)}.badge.gray{background:#eee;color:#666}
+.pending{border:2px dashed var(--p);background:var(--pl)}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--bd);vertical-align:middle}
+th{font-size:12px;color:var(--mut);font-weight:600}
+td .t{font-weight:600}td .s{font-size:12px;color:var(--mut)}
+.empty{text-align:center;color:var(--mut);padding:40px}
+.drop{border:2px dashed var(--bd);border-radius:12px;padding:22px;text-align:center;color:var(--mut);margin-bottom:14px;background:#fff}
+.drop.over{border-color:var(--p);background:var(--pl)}
+.modal-bg{position:fixed;inset:0;background:#0007;display:none;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto;z-index:20}
+.modal-bg.show{display:flex}
+.modal{background:#fff;border-radius:14px;width:min(560px,100%);padding:22px}
+.modal h3{margin:0 0 14px;font-size:18px}
+label{display:block;font-size:12px;font-weight:600;color:var(--mut);margin:12px 0 4px}
+input[type=text],input[type=url],input[type=number],input[type=datetime-local],input[type=time],select{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:14px;font-family:inherit}
+input:focus,select:focus{outline:2px solid var(--p);border-color:var(--p)}
+.chk{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:400;color:var(--tx);margin:6px 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.hint{font-size:12px;color:var(--mut);margin-top:4px}
+.sched{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px;border:1px solid var(--bd);border-radius:8px;margin-bottom:6px}
+.sched label.d{display:inline-flex;align-items:center;gap:3px;margin:0;font-weight:500;color:var(--tx);font-size:12px}
+.prog{height:6px;background:#eee;border-radius:3px;overflow:hidden;margin-top:8px;display:none}
+.prog i{display:block;height:100%;background:var(--p);width:0}
+.err{color:var(--bad);font-size:13px;margin-top:10px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 18px;border-radius:8px;z-index:50;display:none}
+.arrows button{border:0;background:none;cursor:pointer;color:var(--mut);padding:0 4px;font-size:12px}
+.arrows button:hover{color:var(--p)}
+@media(max-width:700px){th:nth-child(4),td:nth-child(4){display:none}}
+</style>
+</head>
+<body>
+<header>
+  <img src="/static/logo.png" alt="">
+  <h1>Pantallas La Cole</h1>
+  <span class="me" id="me"></span>
+  <a href="/logout">Salir</a>
+</header>
+<nav>
+  <button id="t-screens" class="on" onclick="tab('screens')">Pantallas</button>
+  <button id="t-contents" onclick="tab('contents')">Contenido</button>
+</nav>
+<main>
+  <section id="v-screens"></section>
+  <section id="v-contents" style="display:none"></section>
+</main>
+
+<div class="modal-bg" id="mbg"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+let S={screens:[],contents:[],now:0};
+let TAB='screens';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ORI={0:'Horizontal',90:'Vertical (girada a la derecha)',270:'Vertical (girada a la izquierda)',180:'Horizontal invertida'};
+const DAYS=['L','M','X','J','V','S','D'];
+
+async function api(method,url,body){
+  const r=await fetch(url,{method,headers:{'X-Requested-With':'panel','Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  if(r.status===401){location='/login';throw new Error('auth')}
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||('Error '+r.status));
+  return j;
+}
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2800)}
+function tab(t){TAB=t;for(const x of['screens','contents']){$('v-'+x).style.display=x===t?'':'none';$('t-'+x).classList.toggle('on',x===t)}render()}
+function fmt(ts){return ts?new Date(ts*1000).toLocaleString('es-CO',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):''}
+function ago(ts){if(!ts)return 'nunca';const d=Date.now()/1000-ts;if(d<60)return 'hace unos segundos';if(d<3600)return 'hace '+Math.round(d/60)+' min';if(d<86400)return 'hace '+Math.round(d/3600)+' h';return 'hace '+Math.round(d/86400)+' d'}
+function toLocalInput(ts){if(!ts)return '';const d=new Date(ts*1000);const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes())}
+function fromLocalInput(v){return v?Math.floor(new Date(v).getTime()/1000):null}
+
+async function load(){
+  try{S=await api('GET','/api/admin/state');$('me').textContent=S.me;
+    if(!$('mbg').classList.contains('show'))render()}catch(e){}
+}
+
+/* ---------------- Pantallas ---------------- */
+function sleepText(sl){if(!sl.length)return 'Sin apagado programado';return sl.map(s=>s.days.map(d=>DAYS[d-1]).join('')+' '+s.time).join(' · ')}
+function renderScreens(){
+  const pend=S.screens.filter(s=>s.status==='pending'),ok=S.screens.filter(s=>s.status==='approved');
+  let h='';
+  if(pend.length){
+    h+='<h2>Pantallas nuevas por aprobar</h2><div class="grid">'+pend.map(s=>`
+      <div class="card pending scr"><div class="row"><span class="dot ${s.online?'on':''}"></span><h3>${esc(s.name)}</h3></div>
+      <div class="kv"><span>Código</span><span>${esc(s.id.slice(0,8))}</span><span>Equipo</span><span>${esc(s.model||'—')} ${s.android?'· Android '+esc(s.android):''}</span><span>Red</span><span>${esc(s.ip||'—')}</span><span>Visto</span><span>${ago(s.last_seen)}</span></div>
+      <div class="row"><button class="btn pri" onclick="approveModal('${s.id}')">Aprobar</button><button class="btn bad" onclick="delScreen('${s.id}')">Rechazar</button></div></div>`).join('')+'</div>';
+  }
+  h+='<h2>Pantallas ('+ok.length+')</h2>';
+  if(!ok.length)h+='<div class="card empty">Aún no hay pantallas aprobadas.<br>Instala la app en un TV; aparecerá arriba para que la apruebes.</div>';
+  else h+='<div class="grid">'+ok.map(s=>`
+    <div class="card scr"><div class="row"><span class="dot ${s.online?'on':''}"></span><h3>${esc(s.name)}</h3><span class="sp"></span><span class="badge ${s.online?'ok':'gray'}">${s.online?'En línea':'Sin conexión'}</span></div>
+    <div class="kv"><span>Orientación</span><span>${s.orientation===0?'Horizontal':'Vertical'}</span>
+    <span>Reproduce</span><span>${s.online?esc(s.now_title||'—'):'—'}</span>
+    <span>Estado</span><span>${esc(s.state||'—')}</span>
+    <span>Espacio libre</span><span>${s.free_mb!=null?(s.free_mb>=1024?(s.free_mb/1024).toFixed(1)+' GB':s.free_mb+' MB'):'—'}</span>
+    <span>Apagado</span><span>${esc(sleepText(s.sleep))}</span>
+    <span>Equipo</span><span>${esc(s.model||'—')} ${s.android?'· Android '+esc(s.android):''} ${s.app?'· app '+esc(s.app):''}</span>
+    <span>Visto</span><span>${ago(s.last_seen)}${s.ip?' · '+esc(s.ip):''}</span></div>
+    <div class="row" style="flex-wrap:wrap"><button class="btn sm" onclick="editScreen('${s.id}')">Editar</button>
+    <button class="btn sm" onclick="cmd('${s.id}','reload')">Reiniciar</button>
+    <button class="btn sm" ${s.online?'':'disabled'} onclick="cmdSleep('${s.id}')">Apagar ahora</button>
+    <span class="sp"></span><button class="btn sm bad" onclick="delScreen('${s.id}')">Quitar</button></div></div>`).join('')+'</div>';
+  $('v-screens').innerHTML=h;
+}
+async function cmd(id,c){try{await api('POST','/api/admin/screens/'+id+'/cmd',{cmd:c});toast(c==='reload'?'Reinicio enviado':'Apagado enviado');}catch(e){toast(e.message)}}
+function cmdSleep(id){const s=S.screens.find(x=>x.id===id);if(confirm('¿Apagar "'+s.name+'" ahora? Para volver a encenderla hay que usar el control.'))cmd(id,'sleep')}
+async function delScreen(id){const s=S.screens.find(x=>x.id===id);if(!confirm('¿Quitar la pantalla "'+s.name+'"?'))return;await api('DELETE','/api/admin/screens/'+id);load()}
+
+function oriSelect(v){return `<select id="f-ori">${[[0,'Horizontal'],[90,'Vertical – giro horario (90°)'],[270,'Vertical – giro antihorario (270°)'],[180,'Horizontal invertida']].map(o=>`<option value="${o[0]}" ${o[0]===v?'selected':''}>${o[1]}</option>`).join('')}</select>`}
+function approveModal(id){
+  const s=S.screens.find(x=>x.id===id);
+  openModal(`<h3>Aprobar pantalla</h3><label>Nombre</label><input type="text" id="f-name" value="${esc(s.name)}" placeholder="Ej.: Recepción piso 2">
+  <label>Orientación</label>${oriSelect(s.orientation)}
+  <div class="hint">Si el TV está de lado, elige un giro vertical. Si se ve de cabeza, cambia al otro giro vertical.</div><div class="err" id="err"></div>
+  <div class="row" style="margin-top:18px"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" onclick="doApprove('${id}')">Aprobar</button></div>`);
+}
+async function doApprove(id){try{await api('POST','/api/admin/screens/'+id+'/approve',{name:$('f-name').value,orientation:+$('f-ori').value});closeModal();load()}catch(e){$('err').textContent=e.message}}
+let SLEEP=[];
+function editScreen(id){
+  const s=S.screens.find(x=>x.id===id);SLEEP=JSON.parse(JSON.stringify(s.sleep));
+  openModal(`<h3>Editar pantalla</h3><label>Nombre</label><input type="text" id="f-name" value="${esc(s.name)}">
+  <label>Orientación</label>${oriSelect(s.orientation)}
+  <label>Apagado programado</label><div id="sleeps"></div><button class="btn sm" onclick="addSleep()">+ Agregar horario</button>
+  <div class="hint">El TV se apaga solo a esa hora (zona horaria de Colombia). Para encenderlo se usa el control o el botón del TV.</div>
+  <div class="err" id="err"></div>
+  <div class="row" style="margin-top:18px"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" onclick="saveScreen('${id}')">Guardar</button></div>`);
+  drawSleeps();
+}
+function drawSleeps(){
+  $('sleeps').innerHTML=SLEEP.map((x,i)=>`<div class="sched">${DAYS.map((d,j)=>`<label class="d"><input type="checkbox" ${x.days.includes(j+1)?'checked':''} onchange="togDay(${i},${j+1},this.checked)">${d}</label>`).join('')}
+  <input type="time" value="${x.time}" style="width:110px" onchange="SLEEP[${i}].time=this.value"><button class="btn sm bad" onclick="SLEEP.splice(${i},1);drawSleeps()">✕</button></div>`).join('');
+}
+function addSleep(){SLEEP.push({days:[1,2,3,4,5],time:'19:00'});drawSleeps()}
+function togDay(i,d,on){const a=SLEEP[i].days;if(on&&!a.includes(d))a.push(d);if(!on)SLEEP[i].days=a.filter(x=>x!==d)}
+async function saveScreen(id){try{await api('PATCH','/api/admin/screens/'+id,{name:$('f-name').value,orientation:+$('f-ori').value,sleep:SLEEP.filter(x=>x.days.length&&x.time)});closeModal();load()}catch(e){$('err').textContent=e.message}}
+
+/* ---------------- Contenido ---------------- */
+function statusOf(c){
+  if(c.fallback)return['Respaldo','gray'];
+  const n=S.now;
+  if(c.end_at&&c.end_at<n)return['Vencido','bad'];
+  if(c.start_at&&c.start_at>n)return['Programado','warn'];
+  return['Activo','ok'];
+}
+const TYPES={video:'Video',image:'Imagen',web:'Página web'};
+function targetText(c){if(!c.targets)return 'Todas las pantallas';const names=c.targets.map(id=>(S.screens.find(s=>s.id===id)||{}).name).filter(Boolean);return names.length?names.join(', '):'Ninguna pantalla'}
+function renderContents(){
+  let h=`<div class="drop" id="drop">Arrastra aquí videos o imágenes, o <button class="btn pri sm" onclick="contentModal()">+ Agregar contenido</button></div>`;
+  if(!S.contents.length)h+='<div class="card empty">No hay contenido todavía.</div>';
+  else h+=`<div class="card" style="padding:0;overflow:auto"><table><thead><tr><th></th><th>Contenido</th><th>Programación</th><th>Pantallas</th><th>Estado</th><th></th></tr></thead><tbody>`+S.contents.map((c,i)=>{
+    const st=statusOf(c);
+    const sched=c.fallback?'Se muestra cuando no hay nada programado':(c.start_at||c.end_at?(c.start_at?fmt(c.start_at):'Ya')+' → '+(c.end_at?fmt(c.end_at):'sin fin'):'Siempre');
+    const meta=c.type==='web'?esc(c.url):(c.type==='image'?'Imagen · '+c.duration+' s':'Video')+(c.size?' · '+(c.size/1048576).toFixed(1)+' MB':'');
+    return `<tr><td class="arrows"><button onclick="move('${c.id}','up')" ${i?'':'disabled'}>▲</button><button onclick="move('${c.id}','down')" ${i<S.contents.length-1?'':'disabled'}>▼</button></td>
+    <td><div class="t">${esc(c.title)}</div><div class="s"><span class="badge">${TYPES[c.type]}</span> ${meta}${c.interactive?' · interactiva':''}</div></td>
+    <td>${esc(sched)}</td><td class="s">${esc(targetText(c))}</td><td><span class="badge ${st[1]}">${st[0]}</span></td>
+    <td style="white-space:nowrap"><button class="btn sm" onclick="contentModal('${c.id}')">Editar</button> <button class="btn sm bad" onclick="delContent('${c.id}')">Eliminar</button></td></tr>`}).join('')+'</tbody></table></div>';
+  $('v-contents').innerHTML=h;
+  const d=$('drop');
+  d.ondragover=e=>{e.preventDefault();d.classList.add('over')};d.ondragleave=()=>d.classList.remove('over');
+  d.ondrop=e=>{e.preventDefault();d.classList.remove('over');if(e.dataTransfer.files[0])contentModal(null,e.dataTransfer.files[0])};
+}
+async function move(id,dir){await api('POST','/api/admin/contents/'+id+'/move',{dir});load()}
+async function delContent(id){const c=S.contents.find(x=>x.id===id);if(!confirm('¿Eliminar "'+c.title+'"? Se borrará también de las pantallas.'))return;await api('DELETE','/api/admin/contents/'+id);load()}
+
+let PICKED=null;
+function contentModal(id,file){
+  const c=id?S.contents.find(x=>x.id===id):null;PICKED=file||null;
+  const type=c?c.type:(file?(/\.(jpe?g|png|webp|gif)$/i.test(file.name)?'image':'video'):'video');
+  const appr=S.screens.filter(s=>s.status==='approved');
+  const all=!c||!c.targets;
+  openModal(`<h3>${c?'Editar contenido':'Agregar contenido'}</h3>
+  <label>Tipo</label><select id="f-type" ${c?'disabled':''} onchange="typeChanged()"><option value="video">Video</option><option value="image">Imagen</option><option value="web">Página web</option></select>
+  <div id="f-filebox"><label>Archivo</label>${c?`<div class="hint">${esc(c.orig_name||'')}. Para cambiar el archivo, elimina este contenido y crea uno nuevo.</div>`:`<input type="file" id="f-file" onchange="filePicked(this.files[0])"><div class="hint">Máximo ${S.max_upload_mb} MB. Videos: MP4 (H.264) 1080p. Imágenes: JPG/PNG. Verticales: 1080×1920.</div>`}</div>
+  <div id="f-urlbox"><label>Dirección web</label><input type="url" id="f-url" value="${esc(c&&c.url||'')}" placeholder="https://www.lacole.edu.co/..."><label class="chk"><input type="checkbox" id="f-inter" ${c&&c.interactive?'checked':''}> Interactiva (el control remoto actúa sobre la página)</label></div>
+  <label>Título</label><input type="text" id="f-title" value="${esc(c?c.title:(file?file.name.replace(/\.[^.]+$/,''):''))}">
+  <div id="f-durbox"><label>Segundos en pantalla</label><input type="number" id="f-dur" min="3" max="3600" value="${c&&c.duration||(type==='web'?30:10)}"></div>
+  <label class="chk" style="margin-top:14px"><input type="checkbox" id="f-fb" ${c&&c.fallback?'checked':''} onchange="typeChanged()"> Contenido de respaldo (se muestra solo si no hay nada programado)</label>
+  <div id="f-datebox" class="two"><div><label>Empieza</label><input type="datetime-local" id="f-start" value="${toLocalInput(c&&c.start_at)}"></div><div><label>Termina</label><input type="datetime-local" id="f-end" value="${toLocalInput(c&&c.end_at)}"></div></div>
+  <div id="f-datehint" class="hint">Déjalo vacío para que se muestre siempre.</div>
+  <label>Pantallas</label>
+  <label class="chk"><input type="radio" name="tg" value="all" ${all?'checked':''} onchange="tgChanged()"> Todas (incluye las que se agreguen después)</label>
+  <label class="chk"><input type="radio" name="tg" value="sel" ${all?'':'checked'} onchange="tgChanged()"> Solo algunas</label>
+  <div id="f-tgs" style="padding-left:24px">${appr.map(s=>`<label class="chk"><input type="checkbox" class="tgc" value="${s.id}" ${c&&c.targets&&c.targets.includes(s.id)?'checked':''}> ${esc(s.name)} <span class="badge gray">${s.orientation===0?'horizontal':'vertical'}</span></label>`).join('')||'<div class="hint">No hay pantallas aprobadas.</div>'}</div>
+  <div class="prog" id="prog"><i></i></div><div class="err" id="err"></div>
+  <div class="row" style="margin-top:18px"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" id="savebtn" onclick="saveContent(${c?`'${c.id}'`:'null'})">${c?'Guardar':'Subir y publicar'}</button></div>`);
+  $('f-type').value=type;typeChanged();tgChanged();
+}
+function typeChanged(){
+  const t=$('f-type').value,fb=$('f-fb').checked,edit=$('f-type').disabled;
+  $('f-filebox').style.display=t==='web'?'none':'';$('f-urlbox').style.display=t==='web'?'':'none';
+  $('f-durbox').style.display=t==='video'?'none':'';
+  $('f-datebox').style.display=fb?'none':'';$('f-datehint').style.display=fb?'none':'';
+  if(!edit&&$('f-file')){$('f-file').accept=t==='image'?'image/*':'video/*'}
+}
+function tgChanged(){$('f-tgs').style.display=document.querySelector('input[name=tg]:checked').value==='sel'?'':'none'}
+function filePicked(f){PICKED=f;if(f&&!$('f-title').value)$('f-title').value=f.name.replace(/\.[^.]+$/,'');if(f)$('f-type').value=/\.(jpe?g|png|webp|gif)$/i.test(f.name)?'image':'video';typeChanged()}
+function upload(file,onp){return new Promise((res,rej)=>{
+  const x=new XMLHttpRequest();x.open('POST','/api/admin/upload?name='+encodeURIComponent(file.name));x.setRequestHeader('X-Requested-With','panel');
+  x.upload.onprogress=e=>onp(e.loaded/e.total);x.onload=()=>{let j={};try{j=JSON.parse(x.responseText)}catch(e){}x.status===200?res(j):rej(new Error(j.error||'Error al subir ('+x.status+')'))};
+  x.onerror=()=>rej(new Error('Falló la conexión'));x.send(file)})}
+async function saveContent(id){
+  const btn=$('savebtn');$('err').textContent='';
+  const type=$('f-type').value,fb=$('f-fb').checked;
+  const body={type,title:$('f-title').value,fallback:fb,duration:+$('f-dur').value||null,interactive:$('f-inter')&&$('f-inter').checked,
+    url:$('f-url').value,start_at:fb?null:fromLocalInput($('f-start').value),end_at:fb?null:fromLocalInput($('f-end').value),
+    targets:document.querySelector('input[name=tg]:checked').value==='all'?null:[...document.querySelectorAll('.tgc:checked')].map(x=>x.value)};
+  if(body.targets&&!body.targets.length){$('err').textContent='Elige al menos una pantalla';return}
+  btn.disabled=true;
+  try{
+    if(id){await api('PATCH','/api/admin/contents/'+id,body)}
+    else{
+      if(type!=='web'){
+        if(!PICKED)throw new Error('Elige un archivo');
+        const p=$('prog');p.style.display='block';
+        const u=await upload(PICKED,f=>p.firstElementChild.style.width=(f*100)+'%');
+        body.file=u.file;body.orig_name=u.orig_name;
+      }
+      await api('POST','/api/admin/contents',body);
+    }
+    closeModal();toast('Guardado');load();
+  }catch(e){$('err').textContent=e.message;btn.disabled=false}
+}
+
+/* ---------------- Modal / render ---------------- */
+function openModal(h){$('modal').innerHTML=h;$('mbg').classList.add('show')}
+function closeModal(){$('mbg').classList.remove('show');render()}
+function render(){if(TAB==='screens')renderScreens();else renderContents()}
+load();setInterval(load,5000);
+</script>
+</body>
+</html>
