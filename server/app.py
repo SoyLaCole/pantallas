@@ -1,4 +1,5 @@
 """Pantallas La Cole - servidor central (panel + API para los TV)."""
+import hashlib
 import json
 import os
 import re
@@ -7,6 +8,7 @@ import sqlite3
 import time
 import urllib.parse
 import uuid
+import zipfile
 
 import requests as http
 from flask import (Flask, Response, abort, g, jsonify, redirect, request,
@@ -33,9 +35,14 @@ GRACE_SECONDS = 1 * 86400     # y lo conserva 1 día después de su fin
 VIDEO_EXT = {".mp4", ".m4v", ".mkv", ".webm", ".mov", ".ts"}
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
+APP_DIR = os.path.join(DATA_DIR, "app")
+APK_PATH = os.path.join(APP_DIR, "app.apk")
+RELEASE_PATH = os.path.join(APP_DIR, "release.json")
+MAX_APK_MB = 200
 THUMB_DIR = os.path.join(DATA_DIR, "thumbs")
 os.makedirs(MEDIA_DIR, exist_ok=True)
 os.makedirs(THUMB_DIR, exist_ok=True)
+os.makedirs(APP_DIR, exist_ok=True)
 
 app = Flask(__name__, static_folder=None)
 def _secret():
@@ -72,6 +79,7 @@ CREATE TABLE IF NOT EXISTS screens (
   created REAL NOT NULL,
   last_seen REAL, ip TEXT, now_id TEXT, now_title TEXT, state TEXT,
   free_mb INTEGER, model TEXT, android TEXT, app TEXT,
+  app_code INTEGER, owner INTEGER, upd_sha TEXT,
   reload INTEGER NOT NULL DEFAULT 0,
   cmd TEXT
 );
@@ -113,6 +121,10 @@ def _close(_exc):
 def init_db():
     c = sqlite3.connect(DB_PATH)
     c.executescript(SCHEMA)
+    cols = {r[1] for r in c.execute("PRAGMA table_info(screens)")}
+    for name, typ in (("app_code", "INTEGER"), ("owner", "INTEGER"), ("upd_sha", "TEXT")):
+        if name not in cols:
+            c.execute(f"ALTER TABLE screens ADD COLUMN {name} {typ}")
     c.commit()
     c.close()
 
@@ -290,11 +302,12 @@ def admin_state():
             "sleep": json.loads(r["sleep"]), "online": online, "last_seen": r["last_seen"],
             "ip": r["ip"], "now_id": r["now_id"], "now_title": r["now_title"], "state": r["state"],
             "free_mb": r["free_mb"], "model": r["model"], "android": r["android"], "app": r["app"],
-            "cmd": r["cmd"],
+            "cmd": r["cmd"], "app_code": r["app_code"], "owner": bool(r["owner"]) if r["owner"] is not None else None,
+            "upd_sha": r["upd_sha"],
         })
     contents = [row_content(r) for r in db().execute("SELECT * FROM contents ORDER BY sort, created")]
     return jsonify(screens=screens, contents=contents, me=session["email"], now=now(),
-                   tz=TZ_NAME, max_upload_mb=MAX_UPLOAD_MB)
+                   tz=TZ_NAME, max_upload_mb=MAX_UPLOAD_MB, release=get_release())
 
 
 @app.post("/api/admin/upload")
@@ -419,6 +432,69 @@ def content_update(cid):
          f["interactive"], f["targets"], cid))
     db().commit()
     audit(f"contenido editado: {f['title']}")
+    return jsonify(ok=True)
+
+
+def get_release():
+    try:
+        if os.path.isfile(APK_PATH) and os.path.isfile(RELEASE_PATH):
+            with open(RELEASE_PATH) as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return None
+
+
+@app.post("/api/admin/app")
+@admin_required
+def app_upload():
+    """Sube una nueva versión de la app de los TV (archivo .apk)."""
+    name = (request.args.get("name") or "app.apk")[:120]
+    tmp = APK_PATH + ".part"
+    h = hashlib.sha256()
+    total = 0
+    limit = MAX_APK_MB * 1024 * 1024
+    with open(tmp, "wb") as f:
+        while True:
+            chunk = request.stream.read(1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > limit:
+                f.close()
+                os.remove(tmp)
+                return jsonify(error=f"El archivo supera {MAX_APK_MB} MB"), 413
+            h.update(chunk)
+            f.write(chunk)
+    ok = False
+    try:
+        with zipfile.ZipFile(tmp) as z:
+            ok = "AndroidManifest.xml" in z.namelist()
+    except Exception:
+        ok = False
+    if not ok:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        return jsonify(error="Ese archivo no es una app de Android (.apk) válida"), 400
+    os.replace(tmp, APK_PATH)
+    rel = {"sha256": h.hexdigest(), "size": total, "orig_name": name, "uploaded": now(), "by": session["email"]}
+    with open(RELEASE_PATH, "w") as f:
+        json.dump(rel, f)
+    audit(f"app subida: {name}")
+    return jsonify(rel)
+
+
+@app.delete("/api/admin/app")
+@admin_required
+def app_delete():
+    for p in (APK_PATH, RELEASE_PATH):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+    audit("app retirada")
     return jsonify(ok=True)
 
 
@@ -588,12 +664,15 @@ def get_screen(sid, create=True):
 
 def touch(sid, info):
     db().execute(
-        "UPDATE screens SET last_seen=?, ip=?, now_id=?, now_title=?, state=?, free_mb=?, model=?, android=?, app=? "
-        "WHERE id=?",
+        "UPDATE screens SET last_seen=?, ip=?, now_id=?, now_title=?, state=?, free_mb=?, model=?, android=?, app=?, "
+        "app_code=?, owner=?, upd_sha=? WHERE id=?",
         (time.time(), request.headers.get("X-Forwarded-For", request.remote_addr),
          info.get("now_id"), (info.get("now_title") or "")[:120], (info.get("state") or "")[:200],
          info.get("free_mb"), (info.get("model") or "")[:60], (info.get("android") or "")[:20],
-         (info.get("app") or "")[:20], sid))
+         (info.get("app") or "")[:20],
+         info.get("app_code") if isinstance(info.get("app_code"), int) else None,
+         (1 if info.get("owner") else 0) if "owner" in info else None,
+         (info.get("upd_sha") or "")[:64] or None, sid))
     db().commit()
 
 
@@ -641,9 +720,24 @@ def tv_manifest(sid):
             it["stamp"] = f"{r['size']}-{r['mtime']}"
             it["ext"] = os.path.splitext(r["file"])[1]
         items.append(it)
+    rel = get_release()
+    upd = None
+    if rel:
+        upd = {"sha256": rel["sha256"], "size": rel["size"], "url": f"{BASE_URL}/tv/{sid}/app.apk"}
     return jsonify(status="approved", name=scr["name"], orientation=scr["orientation"],
                    reload=scr["reload"], sleep=json.loads(scr["sleep"]), tz=TZ_NAME,
-                   server_time=int(time.time() * 1000), items=items)
+                   server_time=int(time.time() * 1000), items=items, app_update=upd)
+
+
+@app.get("/tv/<sid>/app.apk")
+def tv_app(sid):
+    scr = get_screen(sid, create=False)
+    if not scr or scr["status"] != "approved":
+        abort(403)
+    if not get_release():
+        abort(404)
+    return send_file(APK_PATH, conditional=True, max_age=0, mimetype="application/vnd.android.package-archive",
+                     download_name="pantallas.apk")
 
 
 @app.get("/tv/<sid>/media/<cid>")
