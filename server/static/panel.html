@@ -4,18 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pantallas La Cole</title>
-<link rel="icon" href="/static/icon.png">
+<link rel="icon" href="/static/icon.png"><link rel="stylesheet" href="/static/fonts.css">
 <style>
 :root{--p:#800cab;--p2:#5e0880;--pl:#f6eefb;--bg:#f5f4f7;--card:#fff;--tx:#23202a;--mut:#6d6877;--bd:#e4e0ea;--ok:#1f9d55;--warn:#d98a00;--bad:#c62828}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:'Plus Jakarta Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;letter-spacing:-.003em}
+button,input,select{font-family:inherit}
 header{background:var(--p);color:#fff;display:flex;align-items:center;gap:16px;padding:10px 22px;position:sticky;top:0;z-index:5}
-header img{height:38px}
-header h1{font-size:18px;margin:0;font-weight:700;flex:1}
+header img{height:34px;display:block}
+header .sep{width:1px;height:26px;background:#fff6}
+header h1{font-size:16px;margin:0;font-weight:700;flex:1;letter-spacing:-.01em}
 header .me{font-size:12px;opacity:.9}
 header a{color:#fff;font-size:12px;opacity:.85}
 nav{display:flex;gap:4px;padding:14px 22px 0;max-width:1200px;margin:auto}
-nav button{border:0;background:none;padding:10px 18px;font-size:14px;font-weight:600;color:var(--mut);cursor:pointer;border-bottom:3px solid transparent}
+nav button{border:0;background:none;padding:10px 18px;font-size:14px;font-weight:700;color:var(--mut);cursor:pointer;border-bottom:3px solid transparent}
 nav button.on{color:var(--p);border-color:var(--p)}
 main{max-width:1200px;margin:auto;padding:16px 22px 60px}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px}
@@ -29,10 +31,10 @@ main{max-width:1200px;margin:auto;padding:16px 22px 60px}
 .btn:disabled{opacity:.5;cursor:default}
 .row{display:flex;align-items:center;gap:8px}
 .sp{flex:1}
-h2{font-size:16px;margin:18px 0 10px}
+h2{font-size:16px;margin:18px 0 10px;font-weight:800;letter-spacing:-.01em}
 .dot{width:10px;height:10px;border-radius:50%;background:#bbb;flex:none}
 .dot.on{background:var(--ok);box-shadow:0 0 0 3px #1f9d5530}
-.scr h3{margin:0;font-size:16px}
+.scr h3{margin:0;font-size:16px;font-weight:800}
 .kv{display:grid;grid-template-columns:90px 1fr;gap:3px 8px;margin:12px 0;font-size:13px}
 .kv span:nth-child(odd){color:var(--mut)}
 .badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;background:var(--pl);color:var(--p)}
@@ -42,7 +44,7 @@ h2{font-size:16px;margin:18px 0 10px}
 table{width:100%;border-collapse:collapse}
 th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--bd);vertical-align:middle}
 th{font-size:12px;color:var(--mut);font-weight:600}
-td .t{font-weight:600}td .s{font-size:12px;color:var(--mut)}
+td .t{font-weight:700}td .s{font-size:12px;color:var(--mut)}
 .empty{text-align:center;color:var(--mut);padding:40px}
 .drop{border:2px dashed var(--bd);border-radius:12px;padding:22px;text-align:center;color:var(--mut);margin-bottom:14px;background:#fff}
 .drop.over{border-color:var(--p);background:var(--pl)}
@@ -64,23 +66,35 @@ input:focus,select:focus{outline:2px solid var(--p);border-color:var(--p)}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 18px;border-radius:8px;z-index:50;display:none}
 .arrows button{border:0;background:none;cursor:pointer;color:var(--mut);padding:0 4px;font-size:12px}
 .arrows button:hover{color:var(--p)}
+.th{width:72px;height:72px;border-radius:10px;background:#16121b;object-fit:contain;display:block;flex:none;border:1px solid var(--bd)}
+.th.ph{display:grid;place-items:center;color:#9d93ab}
+.th.ph svg{width:26px;height:26px}
+.fbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+.fbcard{display:flex;gap:14px;align-items:flex-start}
+.fbcard .th{width:104px;height:104px}
+.fbcard h3{margin:0 0 4px;font-size:15px;font-weight:800}
+.note{background:var(--pl);border-radius:10px;padding:12px 14px;color:#4b3a58;font-size:13px;margin-bottom:14px;line-height:1.5}
+.cell{display:flex;align-items:center;gap:12px}
 @media(max-width:700px){th:nth-child(4),td:nth-child(4){display:none}}
 </style>
 </head>
 <body>
 <header>
-  <img src="/static/logo.png" alt="">
-  <h1>Pantallas La Cole</h1>
+  <img src="/static/logo_white.png" alt="Colegiatura Antioqueña de Belleza">
+  <span class="sep"></span>
+  <h1>Panel de pantallas</h1>
   <span class="me" id="me"></span>
   <a href="/logout">Salir</a>
 </header>
 <nav>
   <button id="t-screens" class="on" onclick="tab('screens')">Pantallas</button>
   <button id="t-contents" onclick="tab('contents')">Contenido</button>
+  <button id="t-fallback" onclick="tab('fallback')">Respaldo</button>
 </nav>
 <main>
   <section id="v-screens"></section>
   <section id="v-contents" style="display:none"></section>
+  <section id="v-fallback" style="display:none"></section>
 </main>
 
 <div class="modal-bg" id="mbg"><div class="modal" id="modal"></div></div>
@@ -102,7 +116,7 @@ async function api(method,url,body){
   return j;
 }
 function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2800)}
-function tab(t){TAB=t;for(const x of['screens','contents']){$('v-'+x).style.display=x===t?'':'none';$('t-'+x).classList.toggle('on',x===t)}render()}
+function tab(t){TAB=t;for(const x of['screens','contents','fallback']){$('v-'+x).style.display=x===t?'':'none';$('t-'+x).classList.toggle('on',x===t)}render()}
 function fmt(ts){return ts?new Date(ts*1000).toLocaleString('es-CO',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):''}
 function ago(ts){if(!ts)return 'nunca';const d=Date.now()/1000-ts;if(d<60)return 'hace unos segundos';if(d<3600)return 'hace '+Math.round(d/60)+' min';if(d<86400)return 'hace '+Math.round(d/3600)+' h';return 'hace '+Math.round(d/86400)+' d'}
 function toLocalInput(ts){if(!ts)return '';const d=new Date(ts*1000);const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes())}
@@ -110,7 +124,7 @@ function fromLocalInput(v){return v?Math.floor(new Date(v).getTime()/1000):null}
 
 async function load(){
   try{S=await api('GET','/api/admin/state');$('me').textContent=S.me;
-    if(!$('mbg').classList.contains('show'))render()}catch(e){}
+    if(!$('mbg').classList.contains('show'))render();backfill()}catch(e){}
 }
 
 /* ---------------- Pantallas ---------------- */
@@ -183,15 +197,23 @@ function statusOf(c){
 }
 const TYPES={video:'Video',image:'Imagen',web:'Página web'};
 function targetText(c){if(!c.targets)return 'Todas las pantallas';const names=c.targets.map(id=>(S.screens.find(s=>s.id===id)||{}).name).filter(Boolean);return names.length?names.join(', '):'Ninguna pantalla'}
+const ICON={video:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg>',
+ image:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg>',
+ web:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></svg>'};
+function thumbHtml(c){
+  if(c.thumb)return `<img class="th" alt="" src="/api/admin/contents/${c.id}/thumb?v=${c.thumb}">`;
+  return `<div class="th ph">${ICON[c.type]||''}</div>`;
+}
 function renderContents(){
+  const list=S.contents.filter(c=>!c.fallback);
   let h=`<div class="drop" id="drop">Arrastra aquí videos o imágenes, o <button class="btn pri sm" onclick="contentModal()">+ Agregar contenido</button></div>`;
-  if(!S.contents.length)h+='<div class="card empty">No hay contenido todavía.</div>';
-  else h+=`<div class="card" style="padding:0;overflow:auto"><table><thead><tr><th></th><th>Contenido</th><th>Programación</th><th>Pantallas</th><th>Estado</th><th></th></tr></thead><tbody>`+S.contents.map((c,i)=>{
+  if(!list.length)h+='<div class="card empty">No hay contenido todavía.</div>';
+  else h+=`<div class="card" style="padding:0;overflow:auto"><table><thead><tr><th></th><th>Contenido</th><th>Publicación</th><th>Pantallas</th><th>Estado</th><th></th></tr></thead><tbody>`+list.map((c,i)=>{
     const st=statusOf(c);
-    const sched=c.fallback?'Se muestra cuando no hay nada programado':(c.start_at||c.end_at?(c.start_at?fmt(c.start_at):'Ya')+' → '+(c.end_at?fmt(c.end_at):'sin fin'):'Siempre');
+    const sched=(c.start_at||c.end_at)?(c.start_at?fmt(c.start_at):'Ya')+' → '+(c.end_at?fmt(c.end_at):'sin fin'):'Indefinida';
     const meta=c.type==='web'?esc(c.url):(c.type==='image'?'Imagen · '+c.duration+' s':'Video')+(c.size?' · '+(c.size/1048576).toFixed(1)+' MB':'');
-    return `<tr><td class="arrows"><button onclick="move('${c.id}','up')" ${i?'':'disabled'}>▲</button><button onclick="move('${c.id}','down')" ${i<S.contents.length-1?'':'disabled'}>▼</button></td>
-    <td><div class="t">${esc(c.title)}</div><div class="s"><span class="badge">${TYPES[c.type]}</span> ${meta}${c.interactive?' · interactiva':''}</div></td>
+    return `<tr><td class="arrows"><button onclick="move('${c.id}','up')" ${i?'':'disabled'}>▲</button><button onclick="move('${c.id}','down')" ${i<list.length-1?'':'disabled'}>▼</button></td>
+    <td><div class="cell">${thumbHtml(c)}<div><div class="t">${esc(c.title)}</div><div class="s"><span class="badge">${TYPES[c.type]}</span> ${meta}${c.interactive?' · interactiva':''}</div></div></div></td>
     <td>${esc(sched)}</td><td class="s">${esc(targetText(c))}</td><td><span class="badge ${st[1]}">${st[0]}</span></td>
     <td style="white-space:nowrap"><button class="btn sm" onclick="contentModal('${c.id}')">Editar</button> <button class="btn sm bad" onclick="delContent('${c.id}')">Eliminar</button></td></tr>`}).join('')+'</tbody></table></div>';
   $('v-contents').innerHTML=h;
@@ -199,38 +221,79 @@ function renderContents(){
   d.ondragover=e=>{e.preventDefault();d.classList.add('over')};d.ondragleave=()=>d.classList.remove('over');
   d.ondrop=e=>{e.preventDefault();d.classList.remove('over');if(e.dataTransfer.files[0])contentModal(null,e.dataTransfer.files[0])};
 }
+function renderFallback(){
+  const list=S.contents.filter(c=>c.fallback);
+  let h=`<div class="note"><b>¿Qué es el contenido de respaldo?</b><br>Es lo que una pantalla muestra cuando no tiene nada programado para ese momento, para que nunca se quede en negro. Puedes subir uno para todas las pantallas o uno distinto para algunas.</div>
+  <div class="row" style="margin-bottom:14px"><button class="btn pri" onclick="contentModal(null,null,'fb')">+ Subir contenido de respaldo</button></div>`;
+  if(!list.length)h+='<div class="card empty">Aún no hay contenido de respaldo.</div>';
+  else h+='<div class="fbgrid">'+list.map(c=>`<div class="card fbcard">${thumbHtml(c)}<div style="flex:1;min-width:0">
+    <h3>${esc(c.title)}</h3><div class="s" style="font-size:12px;color:var(--mut);margin-bottom:10px"><span class="badge">${TYPES[c.type]}</span> ${esc(targetText(c))}${c.size?' · '+(c.size/1048576).toFixed(1)+' MB':''}</div>
+    <div class="row"><button class="btn sm" onclick="contentModal('${c.id}')">Editar</button><button class="btn sm bad" onclick="delContent('${c.id}')">Eliminar</button></div></div></div>`).join('')+'</div>';
+  $('v-fallback').innerHTML=h;
+}
+/* ---- miniaturas: se generan en el navegador (fotograma del video / reducción de la imagen) ---- */
+function makeThumb(src,kind){
+  return new Promise(res=>{
+    const url=(typeof src==='string')?null:URL.createObjectURL(src),u=url||src;
+    const fin=b=>{if(url)URL.revokeObjectURL(url);res(b)};
+    const draw=(el,w,h)=>{try{if(!w||!h)return fin(null);const m=360/Math.max(w,h),c=document.createElement('canvas');c.width=Math.max(1,Math.round(w*m));c.height=Math.max(1,Math.round(h*m));c.getContext('2d').drawImage(el,0,0,c.width,c.height);c.toBlob(b=>fin(b),'image/jpeg',.78)}catch(e){fin(null)}};
+    if(kind==='image'){const im=new Image();im.onload=()=>draw(im,im.naturalWidth,im.naturalHeight);im.onerror=()=>fin(null);im.src=u}
+    else{const v=document.createElement('video');v.muted=true;v.playsInline=true;v.preload='auto';
+      v.onloadeddata=()=>{v.currentTime=Math.min(1.5,(v.duration||2)*0.2)};
+      v.onseeked=()=>draw(v,v.videoWidth,v.videoHeight);v.onerror=()=>fin(null);setTimeout(()=>fin(null),15000);v.src=u}
+  });
+}
+async function postThumb(id,blob){await fetch('/api/admin/contents/'+id+'/thumb',{method:'POST',headers:{'X-Requested-With':'panel'},body:blob})}
+const THUMBTRY=new Set();let BF=false;
+async function backfill(){
+  if(BF)return;BF=true;let any=false;
+  try{for(const c of S.contents){
+    if(c.type==='web'||c.thumb||THUMBTRY.has(c.id))continue;THUMBTRY.add(c.id);
+    const b=await makeThumb('/api/admin/contents/'+c.id+'/file',c.type);
+    if(b){await postThumb(c.id,b);any=true}
+  }}catch(e){}finally{BF=false}
+  if(any)load();
+}
 async function move(id,dir){await api('POST','/api/admin/contents/'+id+'/move',{dir});load()}
 async function delContent(id){const c=S.contents.find(x=>x.id===id);if(!confirm('¿Eliminar "'+c.title+'"? Se borrará también de las pantallas.'))return;await api('DELETE','/api/admin/contents/'+id);load()}
 
-let PICKED=null;
-function contentModal(id,file){
+let PICKED=null,FBMODE=false;
+function contentModal(id,file,mode){
   const c=id?S.contents.find(x=>x.id===id):null;PICKED=file||null;
+  FBMODE=c?c.fallback:(mode==='fb');
   const type=c?c.type:(file?(/\.(jpe?g|png|webp|gif)$/i.test(file.name)?'image':'video'):'video');
   const appr=S.screens.filter(s=>s.status==='approved');
   const all=!c||!c.targets;
-  openModal(`<h3>${c?'Editar contenido':'Agregar contenido'}</h3>
-  <label>Tipo</label><select id="f-type" ${c?'disabled':''} onchange="typeChanged()"><option value="video">Video</option><option value="image">Imagen</option><option value="web">Página web</option></select>
+  const range=!!(c&&(c.start_at||c.end_at));
+  openModal(`<h3>${FBMODE?(c?'Editar contenido de respaldo':'Subir contenido de respaldo'):(c?'Editar contenido':'Agregar contenido')}</h3>
+  ${FBMODE?'<div class="note" style="margin-bottom:6px">Se muestra solo cuando la pantalla no tiene nada programado.</div>':''}
+  <label>Tipo</label><select id="f-type" ${c?'disabled':''} onchange="typeChanged()"><option value="video">Video</option><option value="image">Imagen</option>${FBMODE?'':'<option value="web">Página web</option>'}</select>
   <div id="f-filebox"><label>Archivo</label>${c?`<div class="hint">${esc(c.orig_name||'')}. Para cambiar el archivo, elimina este contenido y crea uno nuevo.</div>`:`<input type="file" id="f-file" onchange="filePicked(this.files[0])"><div class="hint">Máximo ${S.max_upload_mb} MB. Videos: MP4 (H.264) 1080p. Imágenes: JPG/PNG. Verticales: 1080×1920.</div>`}</div>
   <div id="f-urlbox"><label>Dirección web</label><input type="url" id="f-url" value="${esc(c&&c.url||'')}" placeholder="https://www.lacole.edu.co/..."><label class="chk"><input type="checkbox" id="f-inter" ${c&&c.interactive?'checked':''}> Interactiva (el control remoto actúa sobre la página)</label></div>
   <label>Título</label><input type="text" id="f-title" value="${esc(c?c.title:(file?file.name.replace(/\.[^.]+$/,''):''))}">
   <div id="f-durbox"><label>Segundos en pantalla</label><input type="number" id="f-dur" min="3" max="3600" value="${c&&c.duration||(type==='web'?30:10)}"></div>
-  <label class="chk" style="margin-top:14px"><input type="checkbox" id="f-fb" ${c&&c.fallback?'checked':''} onchange="typeChanged()"> Contenido de respaldo (se muestra solo si no hay nada programado)</label>
+  <div id="f-schedbox" ${FBMODE?'style="display:none"':''}><label>Publicación</label>
+  <label class="chk"><input type="radio" name="sch" value="always" ${range?'':'checked'} onchange="schChanged()"> Indefinida: se muestra siempre, hasta que lo elimines</label>
+  <label class="chk"><input type="radio" name="sch" value="range" ${range?'checked':''} onchange="schChanged()"> Programar fechas</label>
   <div id="f-datebox" class="two"><div><label>Empieza</label><input type="datetime-local" id="f-start" value="${toLocalInput(c&&c.start_at)}"></div><div><label>Termina</label><input type="datetime-local" id="f-end" value="${toLocalInput(c&&c.end_at)}"></div></div>
-  <div id="f-datehint" class="hint">Déjalo vacío para que se muestre siempre.</div>
+  <div id="f-datehint" class="hint">Deja «Empieza» vacío para publicar de inmediato, o «Termina» vacío si no tiene fecha de fin.</div></div>
   <label>Pantallas</label>
   <label class="chk"><input type="radio" name="tg" value="all" ${all?'checked':''} onchange="tgChanged()"> Todas (incluye las que se agreguen después)</label>
   <label class="chk"><input type="radio" name="tg" value="sel" ${all?'':'checked'} onchange="tgChanged()"> Solo algunas</label>
   <div id="f-tgs" style="padding-left:24px">${appr.map(s=>`<label class="chk"><input type="checkbox" class="tgc" value="${s.id}" ${c&&c.targets&&c.targets.includes(s.id)?'checked':''}> ${esc(s.name)} <span class="badge gray">${s.orientation===0?'horizontal':'vertical'}</span></label>`).join('')||'<div class="hint">No hay pantallas aprobadas.</div>'}</div>
   <div class="prog" id="prog"><i></i></div><div class="err" id="err"></div>
-  <div class="row" style="margin-top:18px"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" id="savebtn" onclick="saveContent(${c?`'${c.id}'`:'null'})">${c?'Guardar':'Subir y publicar'}</button></div>`);
-  $('f-type').value=type;typeChanged();tgChanged();
+  <div class="row" style="margin-top:18px"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" id="savebtn" onclick="saveContent(${c?`'${c.id}'`:'null'})">${c?'Guardar':(FBMODE?'Subir':'Subir y publicar')}</button></div>`);
+  $('f-type').value=type;typeChanged();schChanged();tgChanged();
 }
 function typeChanged(){
-  const t=$('f-type').value,fb=$('f-fb').checked,edit=$('f-type').disabled;
+  const t=$('f-type').value,edit=$('f-type').disabled;
   $('f-filebox').style.display=t==='web'?'none':'';$('f-urlbox').style.display=t==='web'?'':'none';
   $('f-durbox').style.display=t==='video'?'none':'';
-  $('f-datebox').style.display=fb?'none':'';$('f-datehint').style.display=fb?'none':'';
   if(!edit&&$('f-file')){$('f-file').accept=t==='image'?'image/*':'video/*'}
+}
+function schChanged(){
+  const r=document.querySelector('input[name=sch]:checked').value==='range';
+  $('f-datebox').style.display=r?'':'none';$('f-datehint').style.display=r?'':'none';
 }
 function tgChanged(){$('f-tgs').style.display=document.querySelector('input[name=tg]:checked').value==='sel'?'':'none'}
 function filePicked(f){PICKED=f;if(f&&!$('f-title').value)$('f-title').value=f.name.replace(/\.[^.]+$/,'');if(f)$('f-type').value=/\.(jpe?g|png|webp|gif)$/i.test(f.name)?'image':'video';typeChanged()}
@@ -240,9 +303,9 @@ function upload(file,onp){return new Promise((res,rej)=>{
   x.onerror=()=>rej(new Error('Falló la conexión'));x.send(file)})}
 async function saveContent(id){
   const btn=$('savebtn');$('err').textContent='';
-  const type=$('f-type').value,fb=$('f-fb').checked;
+  const type=$('f-type').value,fb=FBMODE,always=fb||document.querySelector('input[name=sch]:checked').value==='always';
   const body={type,title:$('f-title').value,fallback:fb,duration:+$('f-dur').value||null,interactive:$('f-inter')&&$('f-inter').checked,
-    url:$('f-url').value,start_at:fb?null:fromLocalInput($('f-start').value),end_at:fb?null:fromLocalInput($('f-end').value),
+    url:$('f-url').value,start_at:always?null:fromLocalInput($('f-start').value),end_at:always?null:fromLocalInput($('f-end').value),
     targets:document.querySelector('input[name=tg]:checked').value==='all'?null:[...document.querySelectorAll('.tgc:checked')].map(x=>x.value)};
   if(body.targets&&!body.targets.length){$('err').textContent='Elige al menos una pantalla';return}
   btn.disabled=true;
@@ -255,7 +318,8 @@ async function saveContent(id){
         const u=await upload(PICKED,f=>p.firstElementChild.style.width=(f*100)+'%');
         body.file=u.file;body.orig_name=u.orig_name;
       }
-      await api('POST','/api/admin/contents',body);
+      const made=await api('POST','/api/admin/contents',body);
+      if(type!=='web'&&PICKED){try{const tb=await makeThumb(PICKED,type);if(tb)await postThumb(made.id,tb)}catch(e){}}
     }
     closeModal();toast('Guardado');load();
   }catch(e){$('err').textContent=e.message;btn.disabled=false}
@@ -264,7 +328,7 @@ async function saveContent(id){
 /* ---------------- Modal / render ---------------- */
 function openModal(h){$('modal').innerHTML=h;$('mbg').classList.add('show')}
 function closeModal(){$('mbg').classList.remove('show');render()}
-function render(){if(TAB==='screens')renderScreens();else renderContents()}
+function render(){if(TAB==='screens')renderScreens();else if(TAB==='contents')renderContents();else renderFallback()}
 load();setInterval(load,5000);
 </script>
 </body>

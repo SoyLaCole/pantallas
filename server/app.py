@@ -33,7 +33,9 @@ GRACE_SECONDS = 1 * 86400     # y lo conserva 1 día después de su fin
 VIDEO_EXT = {".mp4", ".m4v", ".mkv", ".webm", ".mov", ".ts"}
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
+THUMB_DIR = os.path.join(DATA_DIR, "thumbs")
 os.makedirs(MEDIA_DIR, exist_ok=True)
+os.makedirs(THUMB_DIR, exist_ok=True)
 
 app = Flask(__name__, static_folder=None)
 def _secret():
@@ -233,8 +235,14 @@ def now():
     return int(time.time())
 
 
+def thumb_path(cid):
+    return os.path.join(THUMB_DIR, os.path.basename(cid) + ".jpg")
+
+
 def row_content(r):
+    tp = thumb_path(r["id"])
     return {
+        "thumb": int(os.path.getmtime(tp)) if os.path.isfile(tp) else None,
         "id": r["id"], "title": r["title"], "type": r["type"], "orig_name": r["orig_name"],
         "size": r["size"], "url": r["url"], "duration": r["duration"],
         "start_at": r["start_at"], "end_at": r["end_at"],
@@ -414,13 +422,53 @@ def content_update(cid):
     return jsonify(ok=True)
 
 
+@app.get("/api/admin/contents/<cid>/file")
+@admin_required
+def content_file(cid):
+    """Archivo original, solo para el panel (vista previa y miniaturas)."""
+    r = db().execute("SELECT * FROM contents WHERE id=?", (cid,)).fetchone()
+    if not r or not r["file"]:
+        abort(404)
+    path = os.path.join(MEDIA_DIR, os.path.basename(r["file"]))
+    if not os.path.isfile(path):
+        abort(404)
+    return send_file(path, conditional=True, max_age=0)
+
+
+@app.get("/api/admin/contents/<cid>/thumb")
+@admin_required
+def content_thumb_get(cid):
+    p = thumb_path(cid)
+    if not os.path.isfile(p):
+        abort(404)
+    return send_file(p, mimetype="image/jpeg", max_age=86400)
+
+
+@app.post("/api/admin/contents/<cid>/thumb")
+@admin_required
+def content_thumb_set(cid):
+    if not db().execute("SELECT 1 FROM contents WHERE id=?", (cid,)).fetchone():
+        abort(404)
+    data = request.get_data(cache=False)
+    if not (0 < len(data) <= 600 * 1024) or data[:2] != b"\xff\xd8":
+        return jsonify(error="Miniatura inválida"), 400
+    tmp = thumb_path(cid) + ".part"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.replace(tmp, thumb_path(cid))
+    return jsonify(ok=True)
+
+
 @app.post("/api/admin/contents/<cid>/move")
 @admin_required
 def content_move(cid):
     direction = (request.get_json(force=True, silent=True) or {}).get("dir")
-    rows = [r["id"] for r in db().execute("SELECT id FROM contents ORDER BY sort, created")]
-    if cid not in rows:
+    me = db().execute("SELECT fallback FROM contents WHERE id=?", (cid,)).fetchone()
+    if not me:
         abort(404)
+    # solo se reordena dentro de su propia lista (contenido normal o de respaldo)
+    rows = [r["id"] for r in db().execute(
+        "SELECT id FROM contents WHERE fallback=? ORDER BY sort, created", (me["fallback"],))]
     i = rows.index(cid)
     j = i - 1 if direction == "up" else i + 1
     if 0 <= j < len(rows):
@@ -439,6 +487,10 @@ def content_delete(cid):
         abort(404)
     db().execute("DELETE FROM contents WHERE id=?", (cid,))
     db().commit()
+    try:
+        os.remove(thumb_path(cid))
+    except OSError:
+        pass
     if r["file"]:
         try:
             os.remove(os.path.join(MEDIA_DIR, os.path.basename(r["file"])))
@@ -611,22 +663,23 @@ def tv_media(sid, cid):
 # ---------------------------------------------------------------- página de inicio de sesión
 LOGIN_HTML = """<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Pantallas La Cole</title>
-<link rel="icon" href="/static/icon.png">
+<link rel="icon" href="/static/icon.png"><link rel="stylesheet" href="/static/fonts.css">
 <style>
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#800cab;
-font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#222}
-.card{background:#fff;border-radius:16px;padding:40px 36px;width:min(92vw,400px);text-align:center;
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;background:#800cab;
+font-family:'Plus Jakarta Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#222}
+.card{background:#fff;border-radius:18px;padding:36px 34px 32px;width:min(92vw,400px);text-align:center;
 box-shadow:0 20px 60px rgba(0,0,0,.3)}
-.logo{background:#800cab;border-radius:14px;padding:18px;margin:0 auto 22px;width:190px}
+.logo{width:min(70vw,300px)}
 .logo img{width:100%;display:block}
-h1{font-size:22px;margin:0 0 6px}p{color:#666;margin:0 0 26px;font-size:14px}
+h1{font-size:22px;margin:0 0 6px;font-weight:800;letter-spacing:-.01em}p{color:#6d6877;margin:0 0 26px;font-size:14px}
 a.btn{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 16px;border:1px solid #ddd;
 border-radius:10px;text-decoration:none;color:#222;font-weight:600;font-size:15px}
 a.btn:hover{background:#f6f0fa;border-color:#800cab}
 .err{color:#b3261e;background:#fdecea;border-radius:8px;padding:10px;margin-bottom:16px;font-size:14px}
 .dev{margin-top:14px;font-size:12px}
-</style></head><body><div class="card">
-<div class="logo"><img src="/static/logo.png" alt="La Cole"></div>
+</style></head><body>
+<div class="logo"><img src="/static/logo_white.png" alt="Colegiatura Antioqueña de Belleza"></div>
+<div class="card">
 <h1>Pantallas La Cole</h1><p>Panel de administración</p>
 <div class="err" style="display:__MSGDISP__">__MSG__</div>
 <a class="btn" href="/auth/google"><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.1 5.5c4.3-4 6.7-9.9 6.7-16.9z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-2.9-.8-4.7s.3-3.3.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.3 0 11.7-2.1 15.6-5.7l-7.1-5.5c-2 1.4-4.8 2.3-8.5 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>Ingresar con Google</a>
