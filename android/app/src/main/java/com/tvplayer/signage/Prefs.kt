@@ -6,7 +6,7 @@ import java.util.UUID
 /** Datos que la app recuerda en el TV. */
 object Prefs {
     const val DEFAULT_SERVER = "https://pantallas.lacole.edu.co"
-    const val APP_VERSION = "2.0"
+    const val APP_VERSION = "2.1"
 
     private fun sp(c: Context) = c.getSharedPreferences("tvplayer", Context.MODE_PRIVATE)
 
@@ -36,6 +36,21 @@ object Prefs {
 
     fun clockOffset(c: Context): Long = sp(c).getLong("clock_offset", 0L)
     fun setClockOffset(c: Context, value: Long) = sp(c).edit().putLong("clock_offset", value).apply()
+
+    // --- actualizacion automatica de la app
+    /** Huella (sha256) de la ultima version publicada que ya se reviso o instalo. */
+    fun updSha(c: Context): String = sp(c).getString("upd_sha", "") ?: ""
+    fun setUpdSha(c: Context, v: String) = sp(c).edit().putString("upd_sha", v).apply()
+    fun updNote(c: Context): String = sp(c).getString("upd_note", "") ?: ""
+    fun setUpdNote(c: Context, v: String) = sp(c).edit().putString("upd_note", v).apply()
+    fun pendingSha(c: Context): String = sp(c).getString("pend_sha", "") ?: ""
+    fun pendingCode(c: Context): Int = sp(c).getInt("pend_code", 0)
+    fun setPending(c: Context, sha: String, code: Int) =
+        sp(c).edit().putString("pend_sha", sha).putInt("pend_code", code).apply()
+    fun attemptSha(c: Context): String = sp(c).getString("att_sha", "") ?: ""
+    fun attemptAt(c: Context): Long = sp(c).getLong("att_at", 0L)
+    fun setAttempt(c: Context, sha: String, at: Long) =
+        sp(c).edit().putString("att_sha", sha).putLong("att_at", at).apply()
 
     fun lastSleepKey(c: Context): String = sp(c).getString("last_sleep", "") ?: ""
     fun setLastSleepKey(c: Context, value: String) = sp(c).edit().putString("last_sleep", value).apply()

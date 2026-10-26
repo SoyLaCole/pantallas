@@ -163,10 +163,13 @@ class SyncManager(private val ctx: Context, private val listener: Listener) {
         j.put("model", Build.MODEL ?: "TV")
         j.put("android", Build.VERSION.RELEASE ?: "")
         j.put("app", Prefs.APP_VERSION)
+        j.put("app_code", Updater.installedCode(ctx))
+        j.put("owner", Updater.isOwner(ctx))
+        j.put("upd_sha", Prefs.updSha(ctx))
         j.put("free_mb", freeMb())
         j.put("now_id", nowId)
         j.put("now_title", nowTitle)
-        j.put("state", if (note.isNotEmpty()) note else statusText)
+        j.put("state", if (note.isNotEmpty()) note else if (statusText.isNotEmpty()) statusText else Prefs.updNote(ctx))
         val c = Net.open(ctx, Prefs.serverUrl(ctx) + "/tv/" + Prefs.tvId(ctx) + "/ping")
         c.connectTimeout = 6000
         c.readTimeout = 10000
@@ -260,6 +263,9 @@ class SyncManager(private val ctx: Context, private val listener: Listener) {
             }
         }
         publish()
+
+        // Actualizacion de la propia app (si hay una version nueva publicada en el panel)
+        Updater.check(ctx, m.appUpdate, { running }) { setStatus(it) }
     }
 
     private fun download(item: Item, dest: File): Boolean {

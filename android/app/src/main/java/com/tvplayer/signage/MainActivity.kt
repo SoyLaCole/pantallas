@@ -3,6 +3,7 @@ package com.tvplayer.signage
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.admin.DevicePolicyManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -621,6 +622,7 @@ class MainActivity : Activity(), SyncManager.Listener {
             "Probar apagado de pantalla",
             "Activar permiso de apagado",
             "Abrir ajustes del TV",
+            "Quitar actualización automática",
             "Salir de la app"
         )
         AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
@@ -632,7 +634,8 @@ class MainActivity : Activity(), SyncManager.Listener {
                     2 -> testSleep()
                     3 -> requestAdmin()
                     4 -> openTvSettings()
-                    5 -> finish()
+                    5 -> releaseOwner()
+                    6 -> finish()
                     else -> {}
                 }
             }
@@ -652,6 +655,22 @@ class MainActivity : Activity(), SyncManager.Listener {
             startActivity(i)
         } catch (e: Exception) {
             Toast.makeText(this, "Este TV no permite activarlo desde aquí", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** Deja de ser "propietaria del dispositivo" (solo hace falta antes de desinstalar la app). */
+    @Suppress("DEPRECATION")
+    private fun releaseOwner() {
+        try {
+            val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            if (dpm.isDeviceOwnerApp(packageName)) {
+                dpm.clearDeviceOwnerApp(packageName)
+                Toast.makeText(this, "Listo: ya no se actualiza sola en silencio", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, "Este TV no tiene activada la actualización automática", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "No se pudo: " + (e.message ?: ""), Toast.LENGTH_LONG).show()
         }
     }
 

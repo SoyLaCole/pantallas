@@ -34,6 +34,9 @@ class Item(
         (start == null || start <= nowSec) && (end == null || end > nowSec)
 }
 
+/** Version de la app publicada en el panel. */
+class AppUpdate(val sha256: String, val size: Long, val url: String)
+
 class Manifest(
     val status: String,
     val name: String,
@@ -42,7 +45,8 @@ class Manifest(
     val tz: String,
     val serverTime: Long,
     val sleep: List<SleepRule>,
-    val items: List<Item>
+    val items: List<Item>,
+    val appUpdate: AppUpdate? = null
 ) {
     companion object {
         fun parse(text: String): Manifest {
@@ -81,6 +85,9 @@ class Manifest(
                     sleep.add(SleepRule(days, o.optString("time", "")))
                 }
             }
+            val au = j.optJSONObject("app_update")
+            val appUpdate = if (au != null && au.optString("sha256").isNotEmpty() && au.optString("url").isNotEmpty())
+                AppUpdate(au.getString("sha256"), au.optLong("size", 0L), au.getString("url")) else null
             return Manifest(
                 status = j.optString("status", "pending"),
                 name = j.optString("name", ""),
@@ -89,7 +96,8 @@ class Manifest(
                 tz = j.optString("tz", "America/Bogota"),
                 serverTime = j.optLong("server_time", 0L),
                 sleep = sleep,
-                items = items
+                items = items,
+                appUpdate = appUpdate
             )
         }
     }
