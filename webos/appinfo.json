@@ -1,0 +1,15 @@
+{
+  "id": "co.edu.lacole.pantallas",
+  "version": "1.1.0",
+  "vendor": "La Cole",
+  "type": "web",
+  "main": "index.html",
+  "title": "Pantallas La Cole",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "bgColor": "#000000",
+  "iconColor": "#800cab",
+  "resolution": "1920x1080",
+  "disallowScrollingInMainFrame": true,
+  "requiredACG": []
+}

@@ -696,6 +696,22 @@ def tv_ping(sid):
     return jsonify(status=scr["status"], cmd=cmd, server_time=int(time.time() * 1000))
 
 
+@app.after_request
+def _cors_tv(resp):
+    """La app de webOS (LG) es una página web local: necesita CORS para hablar con /tv/*."""
+    if request.path.startswith("/tv/"):
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Range"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        resp.headers["Access-Control-Expose-Headers"] = "Content-Range, Content-Length, Accept-Ranges, Content-Type"
+    return resp
+
+
+@app.route("/tv/<sid>/ping", methods=["OPTIONS"])
+def tv_ping_options(sid):
+    return ("", 204)
+
+
 @app.get("/tv/<sid>/manifest")
 def tv_manifest(sid):
     scr = get_screen(sid)
@@ -754,6 +770,62 @@ def tv_media(sid, cid):
     if not os.path.isfile(path):
         abort(404)
     return send_file(path, conditional=True, max_age=0, download_name=r["orig_name"] or r["file"])
+
+
+PLAYER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "webos_player")
+
+
+@app.get("/player")
+def player_redirect():
+    return redirect("/player/")
+
+
+@app.get("/player/")
+@app.get("/player/<path:name>")
+def player(name="index.html"):
+    """Reproductor web (el mismo de la app de webOS) para abrirlo desde el navegador de cualquier TV."""
+    if name in ("appinfo.json", "README.md") or not os.path.isdir(PLAYER_DIR):
+        abort(404)
+    resp = send_from_directory(PLAYER_DIR, name, max_age=0)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.get("/tv/<sid>/embed/<cid>")
+def tv_embed(sid, cid):
+    """Para la app de webOS: muestra una página web dentro de un marco aunque el sitio lo prohíba.
+    Si el sitio permite el marco, redirige directo; si no, entrega una copia sin esa restricción."""
+    scr = get_screen(sid, create=False)
+    if not scr or scr["status"] != "approved":
+        abort(403)
+    r = db().execute("SELECT * FROM contents WHERE id=? AND type='web'", (cid,)).fetchone()
+    if not r or not r["url"] or not targets_screen(r, sid):
+        abort(404)
+    url = r["url"]
+    try:
+        up = http.get(url, timeout=10, stream=True, headers={
+            "User-Agent": "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml"})
+    except Exception:
+        return redirect(url)
+    try:
+        h = up.headers
+        blocked = "x-frame-options" in h or "frame-ancestors" in h.get("content-security-policy", "").lower()
+        ctype = h.get("content-type", "")
+        if not blocked or "text/html" not in ctype.lower():
+            return redirect(url)
+        body = up.raw.read(6 * 1024 * 1024 + 1, decode_content=True)
+        if len(body) > 6 * 1024 * 1024:
+            return redirect(url)
+        enc = up.encoding or "utf-8"
+        text = body.decode(enc, errors="replace")
+        base = '<base href="%s">' % up.url.replace('"', "%22")
+        m = re.search(r"<head[^>]*>", text, re.I)
+        text = (text[:m.end()] + base + text[m.end():]) if m else (base + text)
+        text = re.sub(r"<meta[^>]+http-equiv=[\"']?content-security-policy[^>]*>", "", text, flags=re.I)
+        return Response(text, mimetype="text/html")
+    finally:
+        up.close()
 
 
 # ---------------------------------------------------------------- página de inicio de sesión
