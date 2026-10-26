@@ -131,7 +131,7 @@ class SyncManager(private val ctx: Context, private val listener: Listener) {
                 Thread.sleep(20000)
             } catch (e: InterruptedException) {
                 break
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 setStatus("Sin conexión con el servidor.")
                 try {
                     Thread.sleep(10000)
@@ -140,6 +140,24 @@ class SyncManager(private val ctx: Context, private val listener: Listener) {
                 }
             }
         }
+    }
+
+    /** Direccion IP del TV en la red local (para conectarse por adb). */
+    private fun lanIp(): String {
+        try {
+            val en = java.net.NetworkInterface.getNetworkInterfaces()
+            while (en != null && en.hasMoreElements()) {
+                val ni = en.nextElement()
+                if (!ni.isUp || ni.isLoopback) continue
+                val addrs = ni.inetAddresses
+                while (addrs.hasMoreElements()) {
+                    val a = addrs.nextElement()
+                    if (a is java.net.Inet4Address && !a.isLoopbackAddress) return a.hostAddress ?: ""
+                }
+            }
+        } catch (e: Exception) {
+        }
+        return ""
     }
 
     private fun freeMb(): Long = mediaDir.usableSpace / (1024 * 1024)
@@ -152,8 +170,8 @@ class SyncManager(private val ctx: Context, private val listener: Listener) {
                 ping()
             } catch (e: InterruptedException) {
                 break
-            } catch (e: Exception) {
-                // sin red: se intentara de nuevo
+            } catch (e: Throwable) {
+                // sin red (o un fallo inesperado): se intentara de nuevo, el aviso nunca debe detenerse
             }
         }
     }
@@ -167,6 +185,7 @@ class SyncManager(private val ctx: Context, private val listener: Listener) {
         j.put("owner", Updater.isOwner(ctx))
         j.put("upd_sha", Prefs.updSha(ctx))
         j.put("free_mb", freeMb())
+        j.put("lan_ip", lanIp())
         j.put("now_id", nowId)
         j.put("now_title", nowTitle)
         j.put("state", if (note.isNotEmpty()) note else if (statusText.isNotEmpty()) statusText else Prefs.updNote(ctx))

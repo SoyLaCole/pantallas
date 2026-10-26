@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  var APP_VERSION = "1.1";
+  var APP_VERSION = "1.2";
   var DEFAULT_SERVER = /^https?:$/.test(location.protocol) ? location.origin : "https://pantallas.lacole.edu.co";
   var SYNC_MS = 20000, PING_MS = 15000, TICK_MS = 1000, FAIL_MS = 60000;
 
@@ -32,6 +32,7 @@
   var failedUntil = {};
   var rotation = 0;
   var infoUntil = 0;
+  var errNote = "";                  // último error de reproducción (se muestra y se envía al panel)
   var dlStatus = "";                 // texto de descarga en curso
   var extra = { lan_ip: null, model: null, fw: null };
 
@@ -84,7 +85,7 @@
     var body = {
       model: extra.model || "LG webOS TV", android: extra.fw || webosVersion(), app: "webOS " + APP_VERSION,
       now_id: current ? current.id : null, now_title: current ? current.title : "",
-      state: dlStatus || syncStatus
+      state: errNote || dlStatus || syncStatus
     };
     if (extra.lan_ip) body.lan_ip = extra.lan_ip;
     http("POST", "/tv/" + tvId() + "/ping", body, function (err, text) {
@@ -138,7 +139,10 @@
     } else {
       var elapsed = mono() - currentSince;
       if (cur.type === "video") {
-        if (!videoReady && elapsed > 25000) fail(cur);
+        if (!videoReady && elapsed > 25000) {
+          errNote = "El video no arranca (estado " + vid.readyState + ", red " + vid.networkState + "): " + cur.title;
+          fail(cur);
+        }
       } else {
         if (list.length > 1 && elapsed >= (cur.duration || 10) * 1000) {
           showItem(nextAfter(list, cur));
@@ -183,7 +187,7 @@
       img.style.display = "none"; web.style.display = "none"; web.src = "about:blank";
       vid.loop = false;
       vid.muted = false;
-      vid.onplaying = function () { videoReady = true; };
+      vid.onplaying = function () { videoReady = true; errNote = ""; };
       vid.onended = function () {
         if (current !== item) return;
         var l = playlist();
@@ -197,18 +201,29 @@
         }
         showItem(nextAfter(l, item));
       };
-      vid.onerror = function () { if (current === item) fail(item); };
+      vid.onerror = function () {
+        var e = vid.error;
+        errNote = "Error de video " + (e ? e.code : "?") + (e && e.message ? " " + e.message : "") + " (" + item.title + ")";
+        if (current === item) fail(item);
+      };
       vid.src = mediaUrl(item);
       vid.style.display = "block";
       var p = vid.play();
-      if (p && p.catch) p.catch(function () {
+      if (p && p.catch) p.catch(function (err) {
         // Si el TV no deja iniciar con sonido, se reintenta en silencio
-        vid.muted = true; vid.play();
+        vid.muted = true;
+        var p2 = vid.play();
+        if (p2 && p2.catch) p2.catch(function (e2) {
+          errNote = "No inicia el video: " + (e2 && e2.name ? e2.name : "?");
+        });
       });
     } else if (item.type === "image") {
       try { vid.pause(); } catch (e) {}
       vid.style.display = "none"; web.style.display = "none"; web.src = "about:blank";
-      img.onerror = function () { if (current === item) fail(item); };
+      img.onerror = function () {
+        errNote = "Error de imagen: " + item.title;
+        if (current === item) fail(item);
+      };
       img.src = mediaUrl(item);
       img.style.display = "block";
     } else if (item.type === "web") {
@@ -235,6 +250,7 @@
     else if (!m) t = "Conectando…\nCódigo: " + code();
     else if (syncStatus) t = syncStatus;
     else t = "Sin contenido programado";
+    if (errNote) t += "\n" + errNote;
     waitText.textContent = t;
     if (!current) waiting.style.display = "flex";
   }
@@ -271,6 +287,7 @@
     stage.style.transform = "rotate(" + rotation + "deg)";
   }
   window.addEventListener("resize", applyGeometry);
+  window.onerror = function (msg) { errNote = "Error: " + String(msg).slice(0, 120); };
 
 
   // ---------------------------------------------------------------- copia local de videos e imágenes

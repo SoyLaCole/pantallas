@@ -6,7 +6,7 @@ import java.util.UUID
 /** Datos que la app recuerda en el TV. */
 object Prefs {
     const val DEFAULT_SERVER = "https://pantallas.lacole.edu.co"
-    const val APP_VERSION = "2.1"
+    const val APP_VERSION = "2.3"
 
     private fun sp(c: Context) = c.getSharedPreferences("tvplayer", Context.MODE_PRIVATE)
 
@@ -20,11 +20,14 @@ object Prefs {
     }
 
     /** Identificador de este TV (se conserva entre versiones de la app). */
+    @Synchronized
     fun tvId(c: Context): String {
+        // Sincronizado y con commit(): si dos hilos piden el id a la vez en el primer arranque,
+        // ambos reciben el mismo (antes se creaban dos y el TV aparecia duplicado en el panel).
         val existing = sp(c).getString("tv_id", null)
         if (existing != null) return existing
         val id = UUID.randomUUID().toString().replace("-", "").take(16)
-        sp(c).edit().putString("tv_id", id).apply()
+        sp(c).edit().putString("tv_id", id).commit()
         return id
     }
 

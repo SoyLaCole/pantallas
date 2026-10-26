@@ -4,7 +4,7 @@ Reproductor para TV LG con webOS (diseñado para webOS 6.x, p. ej. el modelo 70U
 se registra en el panel con un código, el panel lo aprueba y reproduce el contenido programado (video, imagen, web),
 con la orientación elegida en el panel. Habla con el mismo servidor (`https://pantallas.lacole.edu.co`).
 
-Versión actual: **1.1.0**. No está probada en un televisor real hasta que se anote lo contrario aquí.
+Versión actual: **1.2.0**. No está probada en un televisor real hasta que se anote lo contrario aquí.
 
 ## Archivos
 - `appinfo.json` — datos de la app (id `co.edu.lacole.pantallas`, versión).
@@ -37,6 +37,6 @@ Al cambiar el código, subir el número de `version` en `appinfo.json`. Después
 2. En el PC (con Node.js y `npm install -g @webos-tools/cli`):
    - `ares-setup-device -a tv -i "host=IP_DEL_TV" -i "port=9922" -i "username=prisoner"`
    - `ares-novacom --device tv --getkey` (pide la clave que muestra la app Developer Mode)
-   - `ares-install --device tv webos-ipk\co.edu.lacole.pantallas_1.1.0_all.ipk`
+   - `ares-install --device tv webos-ipk\co.edu.lacole.pantallas_1.2.0_all.ipk`
    - `ares-launch --device tv co.edu.lacole.pantallas`
 3. Aprobar la pantalla en el panel.

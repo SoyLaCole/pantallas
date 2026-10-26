@@ -269,9 +269,17 @@ def targets_screen(row, screen_id):
     if not row["targets"]:
         return True
     try:
-        return screen_id in json.loads(row["targets"])
+        tg = json.loads(row["targets"])
     except Exception:
         return False
+    if screen_id in tg:
+        return True
+    # grupos por orientacion: "ori:0", "ori:90", "ori:180", "ori:270" (incluye pantallas futuras)
+    if any(isinstance(x, str) and x.startswith("ori:") for x in tg):
+        sc = db().execute("SELECT orientation FROM screens WHERE id=?", (screen_id,)).fetchone()
+        if sc and ("ori:%d" % sc["orientation"]) in tg:
+            return True
+    return False
 
 
 def validate_sleep(v):
@@ -381,7 +389,7 @@ def parse_content(body, existing=None):
         f["targets"] = None
     else:
         ids = {r["id"] for r in db().execute("SELECT id FROM screens")}
-        f["targets"] = json.dumps([x for x in tg if x in ids])
+        f["targets"] = json.dumps([x for x in tg if x in ids or x in ("ori:0", "ori:90", "ori:180", "ori:270")])
     return f, None
 
 
