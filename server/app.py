@@ -122,9 +122,11 @@ def init_db():
     c = sqlite3.connect(DB_PATH)
     c.executescript(SCHEMA)
     cols = {r[1] for r in c.execute("PRAGMA table_info(screens)")}
-    for name, typ in (("app_code", "INTEGER"), ("owner", "INTEGER"), ("upd_sha", "TEXT")):
+    for name, typ in (("app_code", "INTEGER"), ("owner", "INTEGER"), ("upd_sha", "TEXT"), ("lan_ip", "TEXT")):
         if name not in cols:
             c.execute(f"ALTER TABLE screens ADD COLUMN {name} {typ}")
+    # El apagado programado ya no se usa: se limpian los horarios que hubiera.
+    c.execute("UPDATE screens SET sleep='[]' WHERE sleep != '[]'")
     c.commit()
     c.close()
 
@@ -303,7 +305,7 @@ def admin_state():
             "ip": r["ip"], "now_id": r["now_id"], "now_title": r["now_title"], "state": r["state"],
             "free_mb": r["free_mb"], "model": r["model"], "android": r["android"], "app": r["app"],
             "cmd": r["cmd"], "app_code": r["app_code"], "owner": bool(r["owner"]) if r["owner"] is not None else None,
-            "upd_sha": r["upd_sha"],
+            "upd_sha": r["upd_sha"], "lan_ip": r["lan_ip"],
         })
     contents = [row_content(r) for r in db().execute("SELECT * FROM contents ORDER BY sort, created")]
     return jsonify(screens=screens, contents=contents, me=session["email"], now=now(),
@@ -665,14 +667,14 @@ def get_screen(sid, create=True):
 def touch(sid, info):
     db().execute(
         "UPDATE screens SET last_seen=?, ip=?, now_id=?, now_title=?, state=?, free_mb=?, model=?, android=?, app=?, "
-        "app_code=?, owner=?, upd_sha=? WHERE id=?",
+        "app_code=?, owner=?, upd_sha=?, lan_ip=COALESCE(?, lan_ip) WHERE id=?",
         (time.time(), request.headers.get("X-Forwarded-For", request.remote_addr),
          info.get("now_id"), (info.get("now_title") or "")[:120], (info.get("state") or "")[:200],
          info.get("free_mb"), (info.get("model") or "")[:60], (info.get("android") or "")[:20],
          (info.get("app") or "")[:20],
          info.get("app_code") if isinstance(info.get("app_code"), int) else None,
          (1 if info.get("owner") else 0) if "owner" in info else None,
-         (info.get("upd_sha") or "")[:64] or None, sid))
+         (info.get("upd_sha") or "")[:64] or None, (info.get("lan_ip") or "")[:45] or None, sid))
     db().commit()
 
 

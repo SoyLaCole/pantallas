@@ -37,6 +37,14 @@ h2{font-size:16px;margin:18px 0 10px;font-weight:800;letter-spacing:-.01em}
 .scr h3{margin:0;font-size:16px;font-weight:800}
 .kv{display:grid;grid-template-columns:90px 1fr;gap:3px 8px;margin:12px 0;font-size:13px}
 .kv span:nth-child(odd){color:var(--mut)}
+.now{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:9px;border:1.5px solid var(--bd);background:#faf9fb;font-size:13px;margin-top:12px}
+.now.live{border-color:var(--ok);background:#f0faf4}
+.now .lamp{width:9px;height:9px;border-radius:50%;background:#bbb;flex:none}
+.now.live .lamp{background:var(--ok);box-shadow:0 0 0 3px #1f9d5533}
+.now .lbl{color:var(--mut);flex:none}.now .ttl{font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+code.cp{cursor:pointer;background:#f3f1f6;padding:1px 6px;border-radius:6px}
+code.cp:hover{outline:1px solid var(--p)}
+pre.cmd{background:#f3f1f6;padding:10px 12px;border-radius:8px;margin:6px 0 10px;overflow:auto;font-size:12.5px;line-height:1.5;white-space:pre-wrap;word-break:break-all}
 .badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;background:var(--pl);color:var(--p)}
 .badge.ok{background:#e3f6ea;color:var(--ok)}.badge.warn{background:#fff3d6;color:var(--warn)}
 .badge.bad{background:#fde7e7;color:var(--bad)}.badge.gray{background:#eee;color:#666}
@@ -66,12 +74,12 @@ input:focus,select:focus{outline:2px solid var(--p);border-color:var(--p)}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 18px;border-radius:8px;z-index:50;display:none}
 .arrows button{border:0;background:none;cursor:pointer;color:var(--mut);padding:0 4px;font-size:12px}
 .arrows button:hover{color:var(--p)}
-.th{width:72px;height:72px;border-radius:10px;background:#16121b;object-fit:contain;display:block;flex:none;border:1px solid var(--bd)}
+.th{width:128px;height:72px;border-radius:10px;background:#16121b;object-fit:contain;display:block;flex:none;border:1px solid var(--bd)}
 .th.ph{display:grid;place-items:center;color:#9d93ab}
-.th.ph svg{width:26px;height:26px}
+.th.ph svg{width:28px;height:28px}
 .fbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
 .fbcard{display:flex;gap:14px;align-items:flex-start}
-.fbcard .th{width:104px;height:104px}
+.fbcard .th{width:160px;height:90px}
 .fbcard h3{margin:0 0 4px;font-size:15px;font-weight:800}
 .note{background:var(--pl);border-radius:10px;padding:12px 14px;color:#4b3a58;font-size:13px;margin-bottom:14px;line-height:1.5}
 .cell{display:flex;align-items:center;gap:12px}
@@ -130,7 +138,7 @@ async function load(){
 }
 
 /* ---------------- Pantallas ---------------- */
-function sleepText(sl){if(!sl.length)return 'Sin apagado programado';return sl.map(s=>s.days.map(d=>DAYS[d-1]).join('')+' '+s.time).join(' · ')}
+function copyText(t){try{navigator.clipboard.writeText(t).then(()=>toast('Copiado: '+t),()=>toast(t))}catch(e){toast(t)}}
 function renderScreens(){
   const pend=S.screens.filter(s=>s.status==='pending'),ok=S.screens.filter(s=>s.status==='approved');
   let h='';
@@ -144,21 +152,19 @@ function renderScreens(){
   if(!ok.length)h+='<div class="card empty">Aún no hay pantallas aprobadas.<br>Instala la app en un TV; aparecerá arriba para que la apruebes.</div>';
   else h+='<div class="grid">'+ok.map(s=>`
     <div class="card scr"><div class="row"><span class="dot ${s.online?'on':''}"></span><h3>${esc(s.name)}</h3><span class="sp"></span><span class="badge ${s.online?'ok':'gray'}">${s.online?'En línea':'Sin conexión'}</span></div>
+    <div class="now ${s.online&&s.now_title?'live':''}"><span class="lamp"></span><span class="lbl">Reproduce</span><span class="ttl">${s.online?esc(s.now_title||'—'):'—'}</span></div>
     <div class="kv"><span>Orientación</span><span>${s.orientation===0?'Horizontal':'Vertical'}</span>
-    <span>Reproduce</span><span>${s.online?esc(s.now_title||'—'):'—'}</span>
+    <span>IP en la red</span><span>${s.lan_ip?`<code class="cp" title="Clic para copiar el comando de conexión" onclick="copyText('adb connect ${esc(s.lan_ip)}:5555')">${esc(s.lan_ip)}</code>`:'<span style="color:var(--mut)">se mostrará al actualizar la app</span>'}</span>
     <span>Estado</span><span>${esc(s.state||'—')}</span>
     <span>Espacio libre</span><span>${s.free_mb!=null?(s.free_mb>=1024?(s.free_mb/1024).toFixed(1)+' GB':s.free_mb+' MB'):'—'}</span>
-    <span>Apagado</span><span>${esc(sleepText(s.sleep))}</span>
     <span>Equipo</span><span>${esc(s.model||'—')} ${s.android?'· Android '+esc(s.android):''} ${s.app?'· app '+esc(s.app):''}</span>
     <span>Visto</span><span>${ago(s.last_seen)}${s.ip?' · '+esc(s.ip):''}</span></div>
-    <div class="row" style="flex-wrap:wrap"><button class="btn sm" onclick="editScreen('${s.id}')">Editar</button>
+    <div class="row" style="flex-wrap:wrap"><button class="btn sm bad" onclick="delScreen('${s.id}')">Quitar</button>
     <button class="btn sm" onclick="cmd('${s.id}','reload')">Reiniciar</button>
-    <button class="btn sm" ${s.online?'':'disabled'} onclick="cmdSleep('${s.id}')">Apagar ahora</button>
-    <span class="sp"></span><button class="btn sm bad" onclick="delScreen('${s.id}')">Quitar</button></div></div>`).join('')+'</div>';
+    <span class="sp"></span><button class="btn pri" onclick="editScreen('${s.id}')">Editar</button></div></div>`).join('')+'</div>';
   $('v-screens').innerHTML=h;
 }
-async function cmd(id,c){try{await api('POST','/api/admin/screens/'+id+'/cmd',{cmd:c});toast(c==='reload'?'Reinicio enviado':'Apagado enviado');}catch(e){toast(e.message)}}
-function cmdSleep(id){const s=S.screens.find(x=>x.id===id);if(confirm('¿Apagar "'+s.name+'" ahora? Para volver a encenderla hay que usar el control.'))cmd(id,'sleep')}
+async function cmd(id,c){try{await api('POST','/api/admin/screens/'+id+'/cmd',{cmd:c});toast('Reinicio enviado');}catch(e){toast(e.message)}}
 async function delScreen(id){const s=S.screens.find(x=>x.id===id);if(!confirm('¿Quitar la pantalla "'+s.name+'"?'))return;await api('DELETE','/api/admin/screens/'+id);load()}
 
 function oriSelect(v){return `<select id="f-ori">${[[0,'Horizontal'],[90,'Vertical – giro horario (90°)'],[270,'Vertical – giro antihorario (270°)'],[180,'Horizontal invertida']].map(o=>`<option value="${o[0]}" ${o[0]===v?'selected':''}>${o[1]}</option>`).join('')}</select>`}
@@ -170,24 +176,14 @@ function approveModal(id){
   <div class="row" style="margin-top:18px"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" onclick="doApprove('${id}')">Aprobar</button></div>`);
 }
 async function doApprove(id){try{await api('POST','/api/admin/screens/'+id+'/approve',{name:$('f-name').value,orientation:+$('f-ori').value});closeModal();load()}catch(e){$('err').textContent=e.message}}
-let SLEEP=[];
 function editScreen(id){
-  const s=S.screens.find(x=>x.id===id);SLEEP=JSON.parse(JSON.stringify(s.sleep));
+  const s=S.screens.find(x=>x.id===id);
   openModal(`<h3>Editar pantalla</h3><label>Nombre</label><input type="text" id="f-name" value="${esc(s.name)}">
   <label>Orientación</label>${oriSelect(s.orientation)}
-  <label>Apagado programado</label><div id="sleeps"></div><button class="btn sm" onclick="addSleep()">+ Agregar horario</button>
-  <div class="hint">El TV se apaga solo a esa hora (zona horaria de Colombia). Para encenderlo se usa el control o el botón del TV.</div>
   <div class="err" id="err"></div>
   <div class="row" style="margin-top:18px"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" onclick="saveScreen('${id}')">Guardar</button></div>`);
-  drawSleeps();
 }
-function drawSleeps(){
-  $('sleeps').innerHTML=SLEEP.map((x,i)=>`<div class="sched">${DAYS.map((d,j)=>`<label class="d"><input type="checkbox" ${x.days.includes(j+1)?'checked':''} onchange="togDay(${i},${j+1},this.checked)">${d}</label>`).join('')}
-  <input type="time" value="${x.time}" style="width:110px" onchange="SLEEP[${i}].time=this.value"><button class="btn sm bad" onclick="SLEEP.splice(${i},1);drawSleeps()">✕</button></div>`).join('');
-}
-function addSleep(){SLEEP.push({days:[1,2,3,4,5],time:'19:00'});drawSleeps()}
-function togDay(i,d,on){const a=SLEEP[i].days;if(on&&!a.includes(d))a.push(d);if(!on)SLEEP[i].days=a.filter(x=>x!==d)}
-async function saveScreen(id){try{await api('PATCH','/api/admin/screens/'+id,{name:$('f-name').value,orientation:+$('f-ori').value,sleep:SLEEP.filter(x=>x.days.length&&x.time)});closeModal();load()}catch(e){$('err').textContent=e.message}}
+async function saveScreen(id){try{await api('PATCH','/api/admin/screens/'+id,{name:$('f-name').value,orientation:+$('f-ori').value,sleep:[]});closeModal();load()}catch(e){$('err').textContent=e.message}}
 
 /* ---------------- Contenido ---------------- */
 function statusOf(c){
@@ -252,10 +248,25 @@ function renderApp(){
     const ow=s.owner===true?['Lista','ok']:(s.owner===false?['Falta activarla en este TV','bad']:['—','gray']);
     return `<tr><td><div class="t">${esc(s.name)}</div><div class="s">${s.online?'En línea':'Sin conexión'}</div></td>
     <td>${s.app?esc(s.app)+(s.app_code?' ('+s.app_code+')':''):'—'}</td><td><span class="badge ${up[1]}">${up[0]}</span></td><td><span class="badge ${ow[1]}">${ow[0]}</span></td></tr>`}).join('')+'</tbody></table></div>';
-  h+=`<h2>Activar la instalación automática en un televisor</h2><div class="card" style="font-size:13px;line-height:1.6">
-  Se hace <b>una sola vez por televisor</b>, al instalar la app, con el TV conectado por adb:<br>
-  <code style="display:block;background:#f3f1f6;padding:10px;border-radius:8px;margin:8px 0;word-break:break-all">adb shell dpm set-device-owner com.tvplayer.signage/.AdminReceiver</code>
-  Si responde un error sobre cuentas, quita las cuentas de Google del televisor (Ajustes → Cuentas) y repite el comando. Los televisores marcados como «Falta activarla» también se pueden actualizar, pero piden confirmar la instalación en pantalla con el control remoto.</div>`;
+  h+=`<h2>Instalar la app en un televisor nuevo</h2><div class="card" style="font-size:13px;line-height:1.65">
+  Reemplaza <code>192.168.0.XX</code> por la IP del televisor. Ábrelos en <b>PowerShell</b>, con el computador en la misma red WiFi que el TV.
+  <p><b>1. En el TV</b> (con el control): Ajustes de Android → Información → pulsa <b>OK 7 veces</b> sobre «Compilación» → vuelve atrás → Opciones de desarrollador → activa <b>Depuración USB</b>. Anota la IP en Ajustes → Red (en los TV que ya tienen la app, la IP está en su tarjeta, en «IP en la red»).</p>
+  <p><b>2. Si PowerShell dice que no reconoce «adb»</b> (hay que repetirlo en cada ventana nueva):</p>
+  <pre class="cmd">$env:Path += ";$env:LOCALAPPDATA\\Android\\Sdk\\platform-tools"; adb version</pre>
+  <p><b>3. Conectar</b> (la primera vez el TV pregunta «¿Permitir depuración USB?»: elige <b>Permitir siempre</b> con el control):</p>
+  <pre class="cmd">adb connect 192.168.0.XX:5555</pre>
+  <p><b>4. Comprobar la conexión.</b> Debe aparecer el TV con la palabra <code>device</code>. Si dice <code>unauthorized</code>, acepta el cuadro en el TV; si dice <code>offline</code>, apaga y enciende la Depuración USB del TV y vuelve a conectar.</p>
+  <pre class="cmd">adb devices</pre>
+  <p><b>5. Instalar.</b> Debe responder <code>Success</code>. Si tienes varios TV conectados a la vez, agrega <code>-s 192.168.0.XX:5555</code> justo después de <code>adb</code>:</p>
+  <pre class="cmd">adb install -r C:\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk
+adb -s 192.168.0.XX:5555 install -r C:\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk</pre>
+  <p><b>6. Abrir la app</b> y luego aprobar la pantalla nueva en la pestaña «Pantallas» (nombre y orientación):</p>
+  <pre class="cmd">adb -s 192.168.0.XX:5555 shell monkey -p com.tvplayer.signage -c android.intent.category.LAUNCHER 1</pre>
+  <p><b>7. Opcional, actualizaciones sin confirmar en pantalla.</b> Solo funciona en algunos TV (por ejemplo Android 11). El TV no debe tener cuentas de Google (Ajustes → Cuentas). Si da error, no pasa nada: ese TV se actualizará igual, pero pidiendo confirmar con el control. En los TV Android 7.1 («RealtekATV») no funciona.</p>
+  <pre class="cmd">adb -s 192.168.0.XX:5555 shell dpm set-device-owner com.tvplayer.signage/.AdminReceiver</pre>
+  <p><b>8. Al terminar</b>, desconecta el TV:</p>
+  <pre class="cmd">adb disconnect 192.168.0.XX:5555</pre>
+  <div class="hint">Importante: todas las versiones de la app deben firmarse con la misma llave. Guarda una copia de <code>C:\\Users\\iscar\\.android\\debug.keystore</code>; si la pierdes, habría que desinstalar y reinstalar la app en cada TV.</div></div>`;
   $('v-app').innerHTML=h;
 }
 function uploadApp(file){
