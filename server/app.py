@@ -27,6 +27,17 @@ CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}
 ALLOWED_DOMAIN = os.environ.get("ALLOWED_DOMAIN", "lacole.edu.co").strip().lower()
 TZ_NAME = os.environ.get("TZ_NAME", "America/Bogota")
+GROUPS = ["Mercadeo", "Primer piso", "Segundo piso", "Tercer piso"]
+# Horario en que la institucion funciona y las pantallas deben estar encendidas: (dias, desde, hasta) en hora local
+OPEN_HOURS = [((0, 1, 2, 3, 4), (6, 0), (21, 30)), ((5, 6), (6, 0), (15, 30))]
+
+
+def is_open_now():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    d = datetime.now(ZoneInfo(TZ_NAME))
+    hm = (d.hour, d.minute)
+    return any(d.weekday() in days and a <= hm < b for days, a, b in OPEN_HOURS)
 DEV_LOGIN = os.environ.get("DEV_LOGIN", "0") == "1"
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "300"))
 ONLINE_SECONDS = 60
@@ -122,10 +133,25 @@ def _close(_exc):
 def init_db():
     c = sqlite3.connect(DB_PATH)
     c.executescript(SCHEMA)
+    c.execute("CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT)")
     cols = {r[1] for r in c.execute("PRAGMA table_info(screens)")}
-    for name, typ in (("app_code", "INTEGER"), ("owner", "INTEGER"), ("upd_sha", "TEXT"), ("lan_ip", "TEXT"), ("last_sync", "REAL")):
+    for name, typ in (("app_code", "INTEGER"), ("owner", "INTEGER"), ("upd_sha", "TEXT"), ("lan_ip", "TEXT"), ("last_sync", "REAL"), ("grp", "TEXT"), ("alerted", "REAL")):
         if name not in cols:
             c.execute(f"ALTER TABLE screens ADD COLUMN {name} {typ}")
+    # Grupos (pisos): se asignan una sola vez a las pantallas que aun no tienen grupo, segun su nombre.
+    for sid, name in c.execute("SELECT id, name FROM screens WHERE grp IS NULL OR grp=''").fetchall():
+        n = (name or "").lower()
+        g = ""
+        if n.startswith("mercadeo"):
+            g = "Mercadeo"
+        elif "almac" in n:
+            g = "Primer piso"
+        elif n.startswith("pasillo") or "segundo piso" in n or "piso 2" in n:
+            g = "Segundo piso"
+        elif "tercer piso" in n or "piso 3" in n:
+            g = "Tercer piso"
+        if g:
+            c.execute("UPDATE screens SET grp=? WHERE id=?", (g, sid))
     # El apagado programado ya no se usa: se limpian los horarios que hubiera.
     c.execute("UPDATE screens SET sleep='[]' WHERE sleep != '[]'")
     c.commit()
@@ -298,10 +324,10 @@ def targets_screen(row, screen_id):
         return False
     if screen_id in tg:
         return True
-    # grupos por orientacion: "ori:0", "ori:90", "ori:180", "ori:270" (incluye pantallas futuras)
-    if any(isinstance(x, str) and x.startswith("ori:") for x in tg):
-        sc = db().execute("SELECT orientation FROM screens WHERE id=?", (screen_id,)).fetchone()
-        if sc and ("ori:%d" % sc["orientation"]) in tg:
+    # grupos: "ori:0|90|180|270" (por orientacion) y "grp:<piso>" (por grupo); incluyen pantallas futuras
+    if any(isinstance(x, str) and x[:4] in ("ori:", "grp:") for x in tg):
+        sc = db().execute("SELECT orientation, grp FROM screens WHERE id=?", (screen_id,)).fetchone()
+        if sc and (("ori:%d" % sc["orientation"]) in tg or (sc["grp"] and ("grp:" + sc["grp"]) in tg)):
             return True
     return False
 
@@ -337,11 +363,11 @@ def admin_state():
             "ip": r["ip"], "now_id": r["now_id"], "now_title": r["now_title"], "state": r["state"],
             "free_mb": r["free_mb"], "model": r["model"], "android": r["android"], "app": r["app"],
             "cmd": r["cmd"], "app_code": r["app_code"], "owner": bool(r["owner"]) if r["owner"] is not None else None,
-            "upd_sha": r["upd_sha"], "lan_ip": r["lan_ip"], "last_sync": r["last_sync"],
+            "upd_sha": r["upd_sha"], "lan_ip": r["lan_ip"], "last_sync": r["last_sync"], "grp": r["grp"] or "",
         })
     contents = [row_content(r) for r in db().execute("SELECT * FROM contents ORDER BY sort, created")]
     return jsonify(screens=screens, contents=contents, me=session["email"], now=now(),
-                   tz=TZ_NAME, max_upload_mb=MAX_UPLOAD_MB, release=get_release())
+                   tz=TZ_NAME, max_upload_mb=MAX_UPLOAD_MB, release=get_release(), groups=GROUPS, open_now=is_open_now())
 
 
 @app.post("/api/admin/upload")
@@ -416,7 +442,7 @@ def parse_content(body, existing=None):
         f["targets"] = None
     else:
         ids = {r["id"] for r in db().execute("SELECT id FROM screens")}
-        f["targets"] = json.dumps([x for x in tg if x in ids or x in ("ori:0", "ori:90", "ori:180", "ori:270")])
+        f["targets"] = json.dumps([x for x in tg if x in ids or x in ("ori:0", "ori:90", "ori:180", "ori:270") or (isinstance(x, str) and x.startswith("grp:") and x[4:] in GROUPS)])
     return f, None
 
 
@@ -592,6 +618,171 @@ def content_move(cid):
     return jsonify(ok=True)
 
 
+# ---------------------------------------------------------------- Alertas por correo
+# El panel avisa por correo cuando una pantalla lleva mucho tiempo sin conexion dentro del horario de
+# funcionamiento. El correo lo envia un Apps Script de Google (sin contrasenas en el servidor).
+import threading
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+ALERT_KEYS = ("alert_url", "alert_secret", "alert_to", "alert_minutes", "alert_on")
+EMAIL_RE = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
+
+
+def _setting(c, k, default=""):
+    r = c.execute("SELECT v FROM settings WHERE k=?", (k,)).fetchone()
+    return r[0] if r and r[0] is not None else default
+
+
+def open_since():
+    """Marca de tiempo en que empezo la jornada de hoy si ahora esta abierto; si no, None."""
+    d = datetime.now(ZoneInfo(TZ_NAME))
+    hm = (d.hour, d.minute)
+    for days, a, b in OPEN_HOURS:
+        if d.weekday() in days and a <= hm < b:
+            return d.replace(hour=a[0], minute=a[1], second=0, microsecond=0).timestamp()
+    return None
+
+
+def send_alert_mail(url, secret, to, subject, body):
+    resp = http.post(url, json={"secret": secret, "to": to, "subject": subject, "body": body}, timeout=25)
+    try:
+        j = resp.json()
+    except Exception:
+        raise RuntimeError("El script de correo no respondió como se esperaba (revisa la dirección)")
+    if not j.get("ok"):
+        raise RuntimeError("El script rechazó el envío: " + str(j.get("error", "error")))
+
+
+def _human(secs):
+    m = int(secs // 60)
+    return f"{m} min" if m < 120 else f"{m // 60} h {m % 60:02d} min"
+
+
+def check_alerts():
+    c = sqlite3.connect(DB_PATH, timeout=30)
+    c.row_factory = sqlite3.Row
+    try:
+        if _setting(c, "alert_on", "0") != "1":
+            return
+        url, secret, to = _setting(c, "alert_url"), _setting(c, "alert_secret"), _setting(c, "alert_to")
+        if not (url and secret and to):
+            return
+        minutes = max(5, int(_setting(c, "alert_minutes", "30") or 30))
+        t = time.time()
+        since = open_since()
+        if since is None:   # fuera de horario: se limpian los avisos pendientes sin enviar nada
+            c.execute("UPDATE screens SET alerted=NULL WHERE alerted IS NOT NULL")
+            c.commit()
+            return
+        down, back = [], []
+        for r in c.execute("SELECT * FROM screens WHERE status='approved'").fetchall():
+            online = bool(r["last_seen"] and t - r["last_seen"] < ONLINE_SECONDS)
+            if online:
+                if r["alerted"]:
+                    back.append(r["name"])
+                    c.execute("UPDATE screens SET alerted=NULL WHERE id=?", (r["id"],))
+            elif r["last_seen"] and not r["alerted"]:
+                ref = max(r["last_seen"], since)
+                if t - ref >= minutes * 60:
+                    down.append((r["name"], r["grp"] or "Sin grupo", t - ref))
+                    c.execute("UPDATE screens SET alerted=? WHERE id=?", (t, r["id"]))
+        c.commit()
+        panel = "https://pantallas.lacole.edu.co"
+        if down:
+            lines = "\n".join(f"- {n} ({g}): sin conexión desde hace {_human(s)}" for n, g, s in down)
+            send_alert_mail(url, secret, to, f"Pantallas sin conexión ({len(down)})",
+                            f"Estas pantallas llevan más de {minutes} minutos sin conexión en horario de funcionamiento:\n\n{lines}\n\nRevisa que el TV esté encendido y con wifi. Panel: {panel}")
+        if back:
+            lines = "\n".join(f"- {n}" for n in back)
+            send_alert_mail(url, secret, to, f"Pantallas recuperadas ({len(back)})",
+                            f"Estas pantallas volvieron a conectarse:\n\n{lines}\n\nPanel: {panel}")
+    finally:
+        c.close()
+
+
+def _alert_loop():
+    while True:
+        time.sleep(60)
+        try:
+            check_alerts()
+        except Exception:
+            pass
+
+
+if os.environ.get("ALERTS", "1") == "1":
+    threading.Thread(target=_alert_loop, daemon=True).start()
+
+
+@app.get("/api/admin/alerts")
+@admin_required
+def alerts_get():
+    c = db()
+    return jsonify(url=_setting(c, "alert_url"), to=_setting(c, "alert_to", session.get("email", "")),
+                   minutes=int(_setting(c, "alert_minutes", "30") or 30), on=_setting(c, "alert_on", "0") == "1",
+                   secret_set=bool(_setting(c, "alert_secret")))
+
+
+@app.post("/api/admin/alerts")
+@admin_required
+def alerts_save():
+    b = request.get_json(force=True, silent=True) or {}
+    url = (b.get("url") or "").strip()
+    if url and not url.startswith("https://script.google.com/"):
+        return jsonify(error="La dirección debe empezar por https://script.google.com/"), 400
+    to = ",".join(x.strip() for x in re.split(r"[,;\s]+", b.get("to") or "") if x.strip())
+    if any(not EMAIL_RE.match(x) for x in to.split(",") if x):
+        return jsonify(error="Hay un correo de destino que no es válido"), 400
+    try:
+        minutes = max(5, min(240, int(b.get("minutes") or 30)))
+    except Exception:
+        return jsonify(error="Los minutos deben ser un número"), 400
+    c = db()
+    rows = {"alert_url": url, "alert_to": to, "alert_minutes": str(minutes), "alert_on": "1" if b.get("on") else "0"}
+    secret = (b.get("secret") or "").strip()
+    if secret:
+        rows["alert_secret"] = secret
+    for k, v in rows.items():
+        c.execute("INSERT INTO settings(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (k, v))
+    c.commit()
+    audit("alertas por correo configuradas")
+    return jsonify(ok=True)
+
+
+@app.post("/api/admin/alerts/test")
+@admin_required
+def alerts_test():
+    c = db()
+    url, secret, to = _setting(c, "alert_url"), _setting(c, "alert_secret"), _setting(c, "alert_to")
+    if not (url and secret and to):
+        return jsonify(error="Primero guarda la dirección del script, la clave y los destinatarios"), 400
+    try:
+        send_alert_mail(url, secret, to, "Prueba de alertas del panel de pantallas",
+                        "Si recibes este correo, las alertas están bien configuradas.")
+    except Exception as e:
+        return jsonify(error=str(e)), 400
+    return jsonify(ok=True)
+
+
+@app.post("/api/admin/contents/order")
+@admin_required
+def content_order():
+    """Reordena arrastrando: recibe la lista de ids en el orden deseado (solo de una misma lista, normal o de respaldo)."""
+    ids = (request.get_json(force=True, silent=True) or {}).get("ids") or []
+    if not isinstance(ids, list) or not ids:
+        return jsonify(error="Lista vacía"), 400
+    rows = db().execute("SELECT id, fallback FROM contents").fetchall()
+    kind = {r["id"]: r["fallback"] for r in rows}
+    if any(i not in kind for i in ids) or len({kind[i] for i in ids}) != 1:
+        return jsonify(error="Lista inválida"), 400
+    fb = kind[ids[0]]
+    rest = [r["id"] for r in db().execute("SELECT id FROM contents WHERE fallback=? ORDER BY sort, created", (fb,)) if r["id"] not in ids]
+    for n, x in enumerate(ids + rest):
+        db().execute("UPDATE contents SET sort=? WHERE id=?", (n + 1, x))
+    db().commit()
+    return jsonify(ok=True)
+
+
 @app.delete("/api/admin/contents/<cid>")
 @admin_required
 def content_delete(cid):
@@ -624,7 +815,10 @@ def screen_approve(sid):
     ori = int(body.get("orientation", r["orientation"]))
     if ori not in (0, 90, 180, 270):
         ori = 0
-    db().execute("UPDATE screens SET status='approved', name=?, orientation=? WHERE id=?", (name, ori, sid))
+    grp = (body.get("grp") or r["grp"] or "")
+    if grp not in GROUPS:
+        return jsonify(error="Elige a qué grupo pertenece la pantalla"), 400
+    db().execute("UPDATE screens SET status='approved', name=?, orientation=?, grp=? WHERE id=?", (name, ori, grp, sid))
     db().commit()
     audit(f"pantalla aprobada: {name}")
     return jsonify(ok=True)
@@ -642,8 +836,11 @@ def screen_update(sid):
     if ori not in (0, 90, 180, 270):
         return jsonify(error="Orientación inválida"), 400
     sleep = validate_sleep(body.get("sleep", json.loads(r["sleep"])))
-    db().execute("UPDATE screens SET name=?, orientation=?, sleep=? WHERE id=?",
-                 (name, ori, json.dumps(sleep), sid))
+    grp = body.get("grp", r["grp"] or "")
+    if grp and grp not in GROUPS:
+        return jsonify(error="Elige un grupo válido"), 400
+    db().execute("UPDATE screens SET name=?, orientation=?, sleep=?, grp=? WHERE id=?",
+                 (name, ori, json.dumps(sleep), grp, sid))
     db().commit()
     audit(f"pantalla editada: {name}")
     return jsonify(ok=True)
