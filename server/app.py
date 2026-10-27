@@ -123,7 +123,7 @@ def init_db():
     c = sqlite3.connect(DB_PATH)
     c.executescript(SCHEMA)
     cols = {r[1] for r in c.execute("PRAGMA table_info(screens)")}
-    for name, typ in (("app_code", "INTEGER"), ("owner", "INTEGER"), ("upd_sha", "TEXT"), ("lan_ip", "TEXT")):
+    for name, typ in (("app_code", "INTEGER"), ("owner", "INTEGER"), ("upd_sha", "TEXT"), ("lan_ip", "TEXT"), ("last_sync", "REAL")):
         if name not in cols:
             c.execute(f"ALTER TABLE screens ADD COLUMN {name} {typ}")
     # El apagado programado ya no se usa: se limpian los horarios que hubiera.
@@ -337,7 +337,7 @@ def admin_state():
             "ip": r["ip"], "now_id": r["now_id"], "now_title": r["now_title"], "state": r["state"],
             "free_mb": r["free_mb"], "model": r["model"], "android": r["android"], "app": r["app"],
             "cmd": r["cmd"], "app_code": r["app_code"], "owner": bool(r["owner"]) if r["owner"] is not None else None,
-            "upd_sha": r["upd_sha"], "lan_ip": r["lan_ip"],
+            "upd_sha": r["upd_sha"], "lan_ip": r["lan_ip"], "last_sync": r["last_sync"],
         })
     contents = [row_content(r) for r in db().execute("SELECT * FROM contents ORDER BY sort, created")]
     return jsonify(screens=screens, contents=contents, me=session["email"], now=now(),
@@ -750,6 +750,11 @@ def tv_ping_options(sid):
 @app.get("/tv/<sid>/manifest")
 def tv_manifest(sid):
     scr = get_screen(sid)
+    try:   # ultima vez que el TV pidio su programacion (distinta del ultimo aviso): sirve para diagnosticar desconexiones
+        db().execute("UPDATE screens SET last_sync=? WHERE id=?", (time.time(), sid))
+        db().commit()
+    except Exception:
+        pass
     if scr["status"] != "approved":
         return jsonify(status="pending", name=scr["name"], server_time=int(time.time() * 1000))
     t = now()

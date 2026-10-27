@@ -176,7 +176,8 @@ function renderScreens(){
     <span>Estado</span><span>${esc(s.state||'—')}</span>
     <span>Espacio libre</span><span>${s.free_mb!=null?(s.free_mb>=1024?(s.free_mb/1024).toFixed(1)+' GB':s.free_mb+' MB'):'—'}</span>
     <span>Equipo</span><span>${esc(s.model||'—')} ${s.android?'· Android '+esc(s.android):''} ${s.app?'· app '+esc(s.app):''}</span>
-    <span>Visto</span><span>${ago(s.last_seen)}${s.ip?' · '+esc(s.ip):''}</span></div>
+    <span>Visto</span><span>${ago(s.last_seen)}${s.ip?' · '+esc(s.ip):''}</span>
+    <span>Sincronizó</span><span>${s.last_sync?ago(s.last_sync):'—'}</span></div>
     <div class="row" style="flex-wrap:wrap"><button class="btn sm bad" onclick="delScreen('${s.id}')">Quitar</button>
     <button class="btn sm" onclick="cmd('${s.id}','reload')">Reiniciar</button>
     <span class="sp"></span><button class="btn pri" onclick="editScreen('${s.id}')">Editar</button></div></div>`).join('')+'</div>';
