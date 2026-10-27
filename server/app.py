@@ -24,6 +24,7 @@ DB_PATH = os.path.join(DATA_DIR, "pantallas.db")
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
 CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+SUPER_ADMIN = os.environ.get("SUPER_ADMIN", "comunicaciones@lacole.edu.co").strip().lower()
 ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}
 ALLOWED_DOMAIN = os.environ.get("ALLOWED_DOMAIN", "lacole.edu.co").strip().lower()
 TZ_NAME = os.environ.get("TZ_NAME", "America/Bogota")
@@ -134,6 +135,10 @@ def init_db():
     c = sqlite3.connect(DB_PATH)
     c.executescript(SCHEMA)
     c.execute("CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS admins (email TEXT PRIMARY KEY, name TEXT, scope TEXT, created REAL, created_by TEXT)")
+    for _e in ADMIN_EMAILS:   # quienes ya estaban en la variable ADMIN_EMAILS quedan registrados (sin pantallas hasta que se les asignen)
+        if _e != SUPER_ADMIN:
+            c.execute("INSERT OR IGNORE INTO admins VALUES (?,?,?,?,?)", (_e, "", '{"screens":[],"groups":[]}', time.time(), "sistema"))
     cols = {r[1] for r in c.execute("PRAGMA table_info(screens)")}
     for name, typ in (("app_code", "INTEGER"), ("owner", "INTEGER"), ("upd_sha", "TEXT"), ("lan_ip", "TEXT"), ("last_sync", "REAL"), ("grp", "TEXT"), ("alerted", "REAL")):
         if name not in cols:
@@ -190,11 +195,26 @@ def audit(what):
 
 
 # ---------------------------------------------------------------- autenticación
-def email_allowed(email, hd=None):
+def load_user(email):
+    """Usuario del panel: superadministrador (solo SUPER_ADMIN) o administrador con pantallas asignadas."""
     email = (email or "").lower()
-    if ADMIN_EMAILS:
-        return email in ADMIN_EMAILS
-    return email.endswith("@" + ALLOWED_DOMAIN)
+    if not email:
+        return None
+    if email == SUPER_ADMIN or (DEV_LOGIN and email == "dev@lacole.edu.co"):
+        return {"email": email, "super": True, "screens": set(), "groups": set()}
+    r = db().execute("SELECT * FROM admins WHERE email=?", (email,)).fetchone()
+    if not r:
+        return None
+    try:
+        sc = json.loads(r["scope"] or "{}")
+    except Exception:
+        sc = {}
+    return {"email": email, "super": False, "screens": set(sc.get("screens", [])),
+            "groups": set(sc.get("groups", [])), "name": r["name"]}
+
+
+def email_allowed(email, hd=None):
+    return load_user(email) is not None
 
 
 def admin_required(f):
@@ -203,9 +223,78 @@ def admin_required(f):
             return jsonify(error="auth"), 401
         if request.method not in ("GET", "HEAD") and request.headers.get("X-Requested-With") != "panel":
             return jsonify(error="csrf"), 403
+        u = load_user(session["email"])
+        if not u:
+            session.clear()
+            return jsonify(error="auth"), 401
+        g.user = u
         return f(*a, **kw)
     wrapper.__name__ = f.__name__
     return wrapper
+
+
+def super_required(f):
+    def inner(*a, **kw):
+        if not g.user["super"]:
+            return jsonify(error="Solo comunicaciones puede hacer esto"), 403
+        return f(*a, **kw)
+    inner.__name__ = f.__name__
+    return admin_required(inner)
+
+
+def scope_ids(u):
+    """Ids de pantallas que puede gestionar el usuario (None = todas)."""
+    if u["super"]:
+        return None
+    ids = set(u["screens"])
+    if u["groups"]:
+        q = ",".join("?" * len(u["groups"]))
+        ids |= {r["id"] for r in db().execute(f"SELECT id FROM screens WHERE grp IN ({q})", tuple(u["groups"]))}
+    return ids
+
+
+def entry_in_scope(u, x):
+    if u["super"]:
+        return True
+    if not isinstance(x, str):
+        return False
+    if x.startswith("grp:"):
+        return x[4:] in u["groups"]
+    if x.startswith("ori:"):
+        return False
+    return x in scope_ids(u)
+
+
+def content_visible(u, r):
+    if u["super"]:
+        return True
+    return any(targets_screen(r, sid) for sid in scope_ids(u))
+
+
+def content_editable(u, r):
+    if u["super"]:
+        return True
+    try:
+        tg = json.loads(r["targets"]) if r["targets"] else None
+    except Exception:
+        tg = None
+    return bool(tg) and all(entry_in_scope(u, x) for x in tg)
+
+
+def need_editable(cid):
+    r = db().execute("SELECT * FROM contents WHERE id=?", (cid,)).fetchone()
+    if not r:
+        abort(404)
+    if not content_editable(g.user, r):
+        abort(403)
+    return r
+
+
+def need_visible(cid):
+    r = db().execute("SELECT * FROM contents WHERE id=?", (cid,)).fetchone()
+    if not r or not content_visible(g.user, r):
+        abort(404)
+    return r
 
 
 @app.get("/login")
@@ -249,8 +338,6 @@ def auth_callback():
         return redirect("/login?e=fail")
     email = (info.get("email") or "").lower()
     if not info.get("email_verified") or not email_allowed(email, info.get("hd")):
-        return redirect("/login?e=denied")
-    if not ADMIN_EMAILS and (info.get("hd") or "").lower() != ALLOWED_DOMAIN:
         return redirect("/login?e=denied")
     session.clear()
     session.permanent = True
@@ -355,7 +442,11 @@ def clean_url(u):
 def admin_state():
     t = time.time()
     screens = []
+    u = g.user
+    ids = scope_ids(u)
     for r in db().execute("SELECT * FROM screens ORDER BY status DESC, name"):
+        if ids is not None and (r["id"] not in ids or r["status"] != "approved"):
+            continue
         online = bool(r["last_seen"] and t - r["last_seen"] < ONLINE_SECONDS)
         screens.append({
             "id": r["id"], "name": r["name"], "status": r["status"], "orientation": r["orientation"],
@@ -365,9 +456,17 @@ def admin_state():
             "cmd": r["cmd"], "app_code": r["app_code"], "owner": bool(r["owner"]) if r["owner"] is not None else None,
             "upd_sha": r["upd_sha"], "lan_ip": r["lan_ip"], "last_sync": r["last_sync"], "grp": r["grp"] or "",
         })
-    contents = [row_content(r) for r in db().execute("SELECT * FROM contents ORDER BY sort, created")]
-    return jsonify(screens=screens, contents=contents, me=session["email"], now=now(),
-                   tz=TZ_NAME, max_upload_mb=MAX_UPLOAD_MB, release=get_release(), groups=GROUPS, open_now=is_open_now())
+    contents = []
+    for r in db().execute("SELECT * FROM contents ORDER BY sort, created"):
+        if not content_visible(u, r):
+            continue
+        d = row_content(r)
+        d["editable"] = content_editable(u, r)
+        contents.append(d)
+    return jsonify(screens=screens, contents=contents, me=session["email"], now=now(), is_super=u["super"],
+                   scope={"screens": sorted(u["screens"]), "groups": sorted(u["groups"])},
+                   tz=TZ_NAME, max_upload_mb=MAX_UPLOAD_MB, release=get_release() if u["super"] else None,
+                   groups=sorted(u["groups"]) if not u["super"] else GROUPS, open_now=is_open_now())
 
 
 @app.post("/api/admin/upload")
@@ -406,6 +505,19 @@ def admin_upload():
         faststart(path)   # indice al principio: los TV arrancan el video sin esperar
         total = os.path.getsize(path)
     return jsonify(file=fname, size=total, kind=kind, orig_name=name)
+
+
+def check_targets_scope(f):
+    """Un administrador limitado solo puede dirigir contenido a sus propias pantallas o grupos."""
+    u = g.user
+    if u["super"]:
+        return None
+    tg = json.loads(f["targets"]) if f.get("targets") else []
+    if not tg:
+        return "Elige al menos una de tus pantallas: solo comunicaciones puede publicar en todas"
+    if any(not entry_in_scope(u, x) for x in tg):
+        return "Solo puedes publicar en las pantallas o grupos que te asignaron"
+    return None
 
 
 def parse_content(body, existing=None):
@@ -453,6 +565,9 @@ def content_create():
     f, err = parse_content(body)
     if err:
         return jsonify(error=err), 400
+    err = check_targets_scope(f)
+    if err:
+        return jsonify(error=err), 403
     if f["type"] in ("video", "image"):
         fname = os.path.basename(body.get("file") or "")
         path = os.path.join(MEDIA_DIR, fname)
@@ -481,13 +596,14 @@ def content_create():
 @app.patch("/api/admin/contents/<cid>")
 @admin_required
 def content_update(cid):
-    r = db().execute("SELECT * FROM contents WHERE id=?", (cid,)).fetchone()
-    if not r:
-        abort(404)
+    r = need_editable(cid)
     body = request.get_json(force=True, silent=True) or {}
     f, err = parse_content(body, existing=r)
     if err:
         return jsonify(error=err), 400
+    err = check_targets_scope(f)
+    if err:
+        return jsonify(error=err), 403
     db().execute(
         "UPDATE contents SET title=?, url=COALESCE(?,url), duration=?, start_at=?, end_at=?, fallback=?, "
         "interactive=?, targets=? WHERE id=?",
@@ -509,7 +625,7 @@ def get_release():
 
 
 @app.post("/api/admin/app")
-@admin_required
+@super_required
 def app_upload():
     """Sube una nueva versión de la app de los TV (archivo .apk)."""
     name = (request.args.get("name") or "app.apk")[:120]
@@ -550,7 +666,7 @@ def app_upload():
 
 
 @app.delete("/api/admin/app")
-@admin_required
+@super_required
 def app_delete():
     for p in (APK_PATH, RELEASE_PATH):
         try:
@@ -565,8 +681,8 @@ def app_delete():
 @admin_required
 def content_file(cid):
     """Archivo original, solo para el panel (vista previa y miniaturas)."""
-    r = db().execute("SELECT * FROM contents WHERE id=?", (cid,)).fetchone()
-    if not r or not r["file"]:
+    r = need_visible(cid)
+    if not r["file"]:
         abort(404)
     path = os.path.join(MEDIA_DIR, os.path.basename(r["file"]))
     if not os.path.isfile(path):
@@ -577,6 +693,7 @@ def content_file(cid):
 @app.get("/api/admin/contents/<cid>/thumb")
 @admin_required
 def content_thumb_get(cid):
+    need_visible(cid)
     p = thumb_path(cid)
     if not os.path.isfile(p):
         abort(404)
@@ -586,8 +703,7 @@ def content_thumb_get(cid):
 @app.post("/api/admin/contents/<cid>/thumb")
 @admin_required
 def content_thumb_set(cid):
-    if not db().execute("SELECT 1 FROM contents WHERE id=?", (cid,)).fetchone():
-        abort(404)
+    need_editable(cid)
     data = request.get_data(cache=False)
     if not (0 < len(data) <= 600 * 1024) or data[:2] != b"\xff\xd8":
         return jsonify(error="Miniatura inválida"), 400
@@ -602,16 +718,18 @@ def content_thumb_set(cid):
 @admin_required
 def content_move(cid):
     direction = (request.get_json(force=True, silent=True) or {}).get("dir")
-    me = db().execute("SELECT fallback FROM contents WHERE id=?", (cid,)).fetchone()
-    if not me:
-        abort(404)
+    me = need_editable(cid)
     # solo se reordena dentro de su propia lista (contenido normal o de respaldo)
-    rows = [r["id"] for r in db().execute(
-        "SELECT id FROM contents WHERE fallback=? ORDER BY sort, created", (me["fallback"],))]
-    i = rows.index(cid)
+    allrows = db().execute("SELECT * FROM contents WHERE fallback=? ORDER BY sort, created", (me["fallback"],)).fetchall()
+    rows = [r["id"] for r in allrows]
+    mine = [r["id"] for r in allrows if content_editable(g.user, r)]
+    i = mine.index(cid)
     j = i - 1 if direction == "up" else i + 1
-    if 0 <= j < len(rows):
-        rows[i], rows[j] = rows[j], rows[i]
+    if 0 <= j < len(mine):
+        mine[i], mine[j] = mine[j], mine[i]
+        pos = [k for k, x in enumerate(rows) if x in set(mine)]
+        for k, x in zip(pos, mine):
+            rows[k] = x
         for n, x in enumerate(rows):
             db().execute("UPDATE contents SET sort=? WHERE id=?", (n + 1, x))
         db().commit()
@@ -715,7 +833,7 @@ if os.environ.get("ALERTS", "1") == "1":
 
 
 @app.get("/api/admin/alerts")
-@admin_required
+@super_required
 def alerts_get():
     c = db()
     return jsonify(url=_setting(c, "alert_url"), to=_setting(c, "alert_to", session.get("email", "")),
@@ -724,7 +842,7 @@ def alerts_get():
 
 
 @app.post("/api/admin/alerts")
-@admin_required
+@super_required
 def alerts_save():
     b = request.get_json(force=True, silent=True) or {}
     url = (b.get("url") or "").strip()
@@ -750,7 +868,7 @@ def alerts_save():
 
 
 @app.post("/api/admin/alerts/test")
-@admin_required
+@super_required
 def alerts_test():
     c = db()
     url, secret, to = _setting(c, "alert_url"), _setting(c, "alert_secret"), _setting(c, "alert_to")
@@ -761,6 +879,55 @@ def alerts_test():
                         "Si recibes este correo, las alertas están bien configuradas.")
     except Exception as e:
         return jsonify(error=str(e)), 400
+    return jsonify(ok=True)
+
+
+# ---------------------------------------------------------------- Administradores (solo comunicaciones)
+@app.get("/api/admin/admins")
+@super_required
+def admins_list():
+    out = [{"email": SUPER_ADMIN, "name": "Superadministrador", "super": True, "screens": [], "groups": []}]
+    for r in db().execute("SELECT * FROM admins ORDER BY email"):
+        try:
+            sc = json.loads(r["scope"] or "{}")
+        except Exception:
+            sc = {}
+        out.append({"email": r["email"], "name": r["name"] or "", "super": False,
+                    "screens": sc.get("screens", []), "groups": sc.get("groups", []),
+                    "created": r["created"], "created_by": r["created_by"]})
+    return jsonify(out)
+
+
+@app.post("/api/admin/admins")
+@super_required
+def admins_save():
+    b = request.get_json(force=True, silent=True) or {}
+    email = (b.get("email") or "").strip().lower()
+    if not EMAIL_RE.match(email):
+        return jsonify(error="Escribe un correo válido"), 400
+    if email == SUPER_ADMIN:
+        return jsonify(error="Ese correo ya es el superadministrador"), 400
+    ids = {r["id"] for r in db().execute("SELECT id FROM screens WHERE status='approved'")}
+    screens = [x for x in (b.get("screens") or []) if x in ids]
+    groups = [x for x in (b.get("groups") or []) if x in GROUPS]
+    name = (b.get("name") or "").strip()[:80]
+    db().execute("INSERT INTO admins(email,name,scope,created,created_by) VALUES(?,?,?,?,?) "
+                 "ON CONFLICT(email) DO UPDATE SET name=excluded.name, scope=excluded.scope",
+                 (email, name, json.dumps({"screens": screens, "groups": groups}), time.time(), session["email"]))
+    db().commit()
+    audit(f"administrador guardado: {email}")
+    return jsonify(ok=True)
+
+
+@app.delete("/api/admin/admins/<path:email>")
+@super_required
+def admins_delete(email):
+    email = email.strip().lower()
+    if email == SUPER_ADMIN:
+        return jsonify(error="No se puede quitar al superadministrador"), 400
+    db().execute("DELETE FROM admins WHERE email=?", (email,))
+    db().commit()
+    audit(f"administrador eliminado: {email}")
     return jsonify(ok=True)
 
 
@@ -776,8 +943,17 @@ def content_order():
     if any(i not in kind for i in ids) or len({kind[i] for i in ids}) != 1:
         return jsonify(error="Lista inválida"), 400
     fb = kind[ids[0]]
-    rest = [r["id"] for r in db().execute("SELECT id FROM contents WHERE fallback=? ORDER BY sort, created", (fb,)) if r["id"] not in ids]
-    for n, x in enumerate(ids + rest):
+    if not g.user["super"]:
+        for i in ids:
+            need_editable(i)
+    full = [r["id"] for r in db().execute("SELECT id FROM contents WHERE fallback=? ORDER BY sort, created", (fb,))]
+    if g.user["super"]:
+        full = ids + [x for x in full if x not in ids]
+    else:   # solo cambian de sitio entre si; el resto de la lista queda donde estaba
+        pos = [k for k, x in enumerate(full) if x in set(ids)]
+        for k, x in zip(pos, ids):
+            full[k] = x
+    for n, x in enumerate(full):
         db().execute("UPDATE contents SET sort=? WHERE id=?", (n + 1, x))
     db().commit()
     return jsonify(ok=True)
@@ -786,9 +962,7 @@ def content_order():
 @app.delete("/api/admin/contents/<cid>")
 @admin_required
 def content_delete(cid):
-    r = db().execute("SELECT * FROM contents WHERE id=?", (cid,)).fetchone()
-    if not r:
-        abort(404)
+    r = need_editable(cid)
     db().execute("DELETE FROM contents WHERE id=?", (cid,))
     db().commit()
     try:
@@ -805,7 +979,7 @@ def content_delete(cid):
 
 
 @app.post("/api/admin/screens/<sid>/approve")
-@admin_required
+@super_required
 def screen_approve(sid):
     body = request.get_json(force=True, silent=True) or {}
     r = db().execute("SELECT * FROM screens WHERE id=?", (sid,)).fetchone()
@@ -825,7 +999,7 @@ def screen_approve(sid):
 
 
 @app.patch("/api/admin/screens/<sid>")
-@admin_required
+@super_required
 def screen_update(sid):
     r = db().execute("SELECT * FROM screens WHERE id=?", (sid,)).fetchone()
     if not r:
@@ -847,7 +1021,7 @@ def screen_update(sid):
 
 
 @app.post("/api/admin/screens/<sid>/cmd")
-@admin_required
+@super_required
 def screen_cmd(sid):
     c = (request.get_json(force=True, silent=True) or {}).get("cmd")
     if c not in ("sleep", "reload"):
@@ -864,7 +1038,7 @@ def screen_cmd(sid):
 
 
 @app.delete("/api/admin/screens/<sid>")
-@admin_required
+@super_required
 def screen_delete(sid):
     db().execute("DELETE FROM screens WHERE id=?", (sid,))
     db().commit()
@@ -873,7 +1047,7 @@ def screen_delete(sid):
 
 
 @app.get("/api/admin/log")
-@admin_required
+@super_required
 def get_log():
     rows = db().execute("SELECT * FROM log ORDER BY ts DESC LIMIT 100").fetchall()
     return jsonify([dict(r) for r in rows])
