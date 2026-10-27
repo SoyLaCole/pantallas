@@ -11,6 +11,7 @@ import uuid
 import zipfile
 
 import requests as http
+from faststart import faststart
 from flask import (Flask, Response, abort, g, jsonify, redirect, request,
                    send_file, send_from_directory, session)
 from google.auth.transport import requests as g_requests
@@ -132,6 +133,29 @@ def init_db():
 
 
 init_db()
+
+
+def _faststart_existing():
+    """Una sola vez: corrige los MP4 ya subidos que tienen el indice al final."""
+    marker = os.path.join(DATA_DIR, ".faststart_done")
+    if os.path.exists(marker):
+        return
+    c = sqlite3.connect(DB_PATH, timeout=30)
+    try:
+        for cid, fn in c.execute("SELECT id, file FROM contents WHERE type='video' AND file IS NOT NULL").fetchall():
+            p = os.path.join(MEDIA_DIR, os.path.basename(fn))
+            if os.path.splitext(p)[1].lower() in (".mp4", ".m4v", ".mov") and os.path.isfile(p) and faststart(p):
+                c.execute("UPDATE contents SET size=?, mtime=? WHERE id=?", (os.path.getsize(p), int(os.path.getmtime(p)), cid))
+                c.commit()
+        open(marker, "w").write("1")
+    finally:
+        c.close()
+
+
+try:
+    _faststart_existing()
+except Exception:
+    pass
 
 
 def audit(what):
@@ -352,6 +376,9 @@ def admin_upload():
         os.remove(tmp)
         return jsonify(error="Archivo vacío"), 400
     os.replace(tmp, path)
+    if ext in (".mp4", ".m4v", ".mov"):
+        faststart(path)   # indice al principio: los TV arrancan el video sin esperar
+        total = os.path.getsize(path)
     return jsonify(file=fname, size=total, kind=kind, orig_name=name)
 
 

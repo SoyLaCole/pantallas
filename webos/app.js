@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  var APP_VERSION = "1.2";
+  var APP_VERSION = "1.2.1";
   var DEFAULT_SERVER = /^https?:$/.test(location.protocol) ? location.origin : "https://pantallas.lacole.edu.co";
   var SYNC_MS = 20000, PING_MS = 15000, TICK_MS = 1000, FAIL_MS = 60000;
 
@@ -176,6 +176,15 @@
 
   function embedUrl(it) { return serverUrl() + "/tv/" + tvId() + "/embed/" + encodeURIComponent(it.id); }
 
+  function diag() {
+    try {
+      var e = vid.error;
+      return " [src=" + (vid.src.indexOf("blob:") === 0 ? "copia" : "red") + " net=" + vid.networkState + " ready=" + vid.readyState +
+        " err=" + (e ? e.code : "-") + " h264=" + (vid.canPlayType('video/mp4; codecs="avc1.4d4028, mp4a.40.2"') || "no") +
+        " mp4=" + (vid.canPlayType("video/mp4") || "no") + "]";
+    } catch (x) { return ""; }
+  }
+
   function showItem(item) {
     current = item;
     currentSince = mono();
@@ -203,7 +212,7 @@
       };
       vid.onerror = function () {
         var e = vid.error;
-        errNote = "Error de video " + (e ? e.code : "?") + (e && e.message ? " " + e.message : "") + " (" + item.title + ")";
+        errNote = "Error de video " + (e ? e.code : "?") + (e && e.message ? " " + e.message : "") + " (" + item.title + ")" + diag();
         if (current === item) fail(item);
       };
       vid.src = mediaUrl(item);
@@ -214,7 +223,7 @@
         vid.muted = true;
         var p2 = vid.play();
         if (p2 && p2.catch) p2.catch(function (e2) {
-          errNote = "No inicia el video: " + (e2 && e2.name ? e2.name : "?");
+          errNote = "No inicia el video: " + (e2 && e2.name ? e2.name : "?") + diag();
         });
       });
     } else if (item.type === "image") {
