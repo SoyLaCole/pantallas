@@ -24,6 +24,9 @@ DB_PATH = os.path.join(DATA_DIR, "pantallas.db")
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
 CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+PANEL_VERSION = "2.3.0"          # subir este número en cada cambio del panel
+PANEL_BUILD = "2026-10-28"
+START_TS = time.time()           # momento en que arrancó esta versión del servidor (≈ hora del despliegue)
 SUPER_ADMIN = os.environ.get("SUPER_ADMIN", "comunicaciones@lacole.edu.co").strip().lower()
 ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}
 ALLOWED_DOMAIN = os.environ.get("ALLOWED_DOMAIN", "lacole.edu.co").strip().lower()
@@ -366,7 +369,9 @@ def logout():
 def index():
     if not session.get("email"):
         return redirect("/login")
-    return send_from_directory(STATIC_DIR, "panel.html")
+    resp = send_from_directory(STATIC_DIR, "panel.html", max_age=0)
+    resp.headers["Cache-Control"] = "no-store, must-revalidate"   # el navegador nunca debe guardar una copia vieja del panel
+    return resp
 
 
 @app.get("/static/<path:name>")
@@ -463,7 +468,7 @@ def admin_state():
         d = row_content(r)
         d["editable"] = content_editable(u, r)
         contents.append(d)
-    return jsonify(screens=screens, contents=contents, me=session["email"], now=now(), is_super=u["super"],
+    return jsonify(screens=screens, contents=contents, me=session["email"], now=now(), is_super=u["super"], version=PANEL_VERSION, build=PANEL_BUILD, started=START_TS,
                    scope={"screens": sorted(u["screens"]), "groups": sorted(u["groups"])},
                    tz=TZ_NAME, max_upload_mb=MAX_UPLOAD_MB, release=get_release() if u["super"] else None,
                    groups=sorted(u["groups"]) if not u["super"] else GROUPS, open_now=is_open_now())

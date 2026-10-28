@@ -127,6 +127,7 @@ input:focus,select:focus{outline:2px solid var(--p);border-color:var(--p)}
   <span class="me" id="me"></span>
   <a href="/logout">Salir</a>
 </header>
+<div id="stale" style="display:none;background:#fff3d6;color:#7a5200;padding:10px 20px;font-size:14px;font-weight:600">Hay una versión nueva del panel. <a href="#" onclick="hardReload();return false" style="color:#7a5200">Recargar ahora</a></div>
 <nav>
   <button id="t-screens" class="on" onclick="tab('screens')">Pantallas</button>
   <button id="t-contents" onclick="tab('contents')">Contenido</button>
@@ -149,6 +150,7 @@ input:focus,select:focus{outline:2px solid var(--p);border-color:var(--p)}
 
 <script>
 let S={screens:[],contents:[],now:0};
+const PAGE_VERSION='2.3.0';
 let TAB='screens';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -171,7 +173,7 @@ function fromLocalInput(v){return v?Math.floor(new Date(v).getTime()/1000):null}
 
 async function load(){
   try{S=await api('GET','/api/admin/state');$('me').textContent=S.me+(S.is_super?'':' · acceso limitado');
-    $('t-app').style.display=S.is_super?'':'none';$('t-admins').style.display=S.is_super?'':'none';
+    $('stale').style.display=(S.version&&S.version!==PAGE_VERSION)?'':'none';$('t-app').style.display=S.is_super?'':'none';$('t-admins').style.display=S.is_super?'':'none';
     if(!S.is_super&&(TAB==='app'||TAB==='admins'))tab('screens');
     if(!$('mbg').classList.contains('show'))if(!(TAB==='app'&&APPUP))render();backfill()}catch(e){}
 }
@@ -421,6 +423,15 @@ async function saveAdmin(){
     closeModal();toast('Administrador guardado');ADMINS=null;renderAdmins()}catch(e){$('ad-err').textContent=e.message}
 }
 function delAdmin(email){confirmBox('Quitar administrador','«'+esc(email)+'» ya no podrá entrar al panel.','Quitar',async()=>{await api('DELETE','/api/admin/admins/'+encodeURIComponent(email));ADMINS=null;renderAdmins()})}
+function verCard(){
+  const stale=S.version&&S.version!==PAGE_VERSION;
+  return `<div class="card" style="margin-bottom:16px"><div class="row" style="flex-wrap:wrap;gap:14px"><div style="flex:1;min-width:240px">
+  <div style="font-weight:800;font-size:15px">Versión del panel</div>
+  <div class="kv" style="margin-top:8px"><span>En el servidor</span><span><b>${esc(S.version||'—')}</b> · ${esc(S.build||'')}</span>
+  <span>En tu navegador</span><span><b>${esc(PAGE_VERSION)}</b></span>
+  <span>Servidor iniciado</span><span>${S.started?fmt(S.started):'—'}</span></div></div>
+  <div style="display:flex;align-items:center;gap:10px">${stale?'<span class="badge bad">Tu navegador tiene una versión vieja</span><button class="btn pri" onclick="hardReload()">Recargar ahora</button>':'<span class="badge ok">Al día</span><button class="btn sm" onclick="hardReload()">Recargar</button>'}</div></div></div>`}
+function hardReload(){location.href='/?v='+Date.now()}
 function renderHelp(){
   const android=`<div class="card" style="font-size:13px;line-height:1.65">
   Reemplaza <code>192.168.0.XX</code> por la IP del televisor. Ábrelos en <b>PowerShell</b>, con el computador en la misma red WiFi que el TV.
@@ -441,7 +452,7 @@ adb -s 192.168.0.XX:5555 install -r C:\\android\\app\\build\\outputs\\apk\\debug
   <p><b>8. Al terminar</b>, desconecta el TV:</p>
   <pre class="cmd">adb disconnect 192.168.0.XX:5555</pre>
   <div class="hint">Importante: todas las versiones de la app deben firmarse con la misma llave. Guarda una copia de <code>C:\\Users\\iscar\\.android\\debug.keystore</code>; si la pierdes, habría que desinstalar y reinstalar la app en cada TV.</div></div>`;
-  $('v-help').innerHTML=`
+  $('v-help').innerHTML=verCard()+`
   <h2>Agregar una pantalla nueva</h2>
   <div class="card" style="font-size:14px;line-height:1.6">
   <b>Datos que necesitas, sin importar la marca del televisor</b>
