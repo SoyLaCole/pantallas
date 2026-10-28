@@ -24,7 +24,7 @@ DB_PATH = os.path.join(DATA_DIR, "pantallas.db")
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
 CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-PANEL_VERSION = "2.3.1"          # subir este número en cada cambio del panel
+PANEL_VERSION = "2.4.0"          # subir este número en cada cambio del panel
 PANEL_BUILD = "2026-10-28"
 START_TS = time.time()           # momento en que arrancó esta versión del servidor (≈ hora del despliegue)
 SUPER_ADMIN = os.environ.get("SUPER_ADMIN", "comunicaciones@lacole.edu.co").strip().lower()
@@ -162,8 +162,59 @@ def init_db():
             c.execute("UPDATE screens SET grp=? WHERE id=?", (g, sid))
     # El apagado programado ya no se usa: se limpian los horarios que hubiera.
     c.execute("UPDATE screens SET sleep='[]' WHERE sleep != '[]'")
+    # Grupos editables: una pantalla puede estar en varios grupos (tablas groups / group_members).
+    c.execute("CREATE TABLE IF NOT EXISTS groups (id TEXT PRIMARY KEY, name TEXT NOT NULL, pos INTEGER NOT NULL DEFAULT 0)")
+    c.execute("CREATE TABLE IF NOT EXISTS group_members (group_id TEXT NOT NULL, screen_id TEXT NOT NULL, PRIMARY KEY (group_id, screen_id))")
+    if not c.execute("SELECT 1 FROM settings WHERE k='groups_v2'").fetchone():
+        _seed_groups(c)
+        c.execute("INSERT OR REPLACE INTO settings VALUES ('groups_v2', ?)", (str(time.time()),))
     c.commit()
     c.close()
+
+
+SEED_GROUPS = ["Mercadeo", "Pasillo de la Fama", "Horizontales", "Primer piso", "Segundo piso", "Tercer piso"]
+
+
+def _seed_groups(c):
+    """Una sola vez: crea los grupos iniciales y migra pisos, contenidos y administradores al nuevo modelo."""
+    ids = {}
+    for pos, name in enumerate(SEED_GROUPS):
+        ids[name] = uuid.uuid4().hex[:8]
+        c.execute("INSERT INTO groups VALUES (?,?,?)", (ids[name], name, pos))
+    for sid, name, ori, old in c.execute("SELECT id, name, orientation, grp FROM screens").fetchall():
+        n = (name or "").lower()
+        mer = (old == "Mercadeo") or n.startswith("mercadeo")
+        mem = set()
+        if mer:
+            mem.add("Mercadeo")
+        if n.startswith("pasillo de la fama"):
+            mem.add("Pasillo de la Fama")
+        if ori == 0 and not mer:
+            mem.add("Horizontales")
+        if old in ("Primer piso", "Segundo piso", "Tercer piso"):
+            mem.add(old)
+        for m in mem:
+            c.execute("INSERT OR IGNORE INTO group_members VALUES (?,?)", (ids[m], sid))
+    for cid, tg in c.execute("SELECT id, targets FROM contents WHERE targets IS NOT NULL").fetchall():
+        try:
+            lst = json.loads(tg)
+        except Exception:
+            continue
+        out = []
+        for x in lst:
+            if isinstance(x, str) and x.startswith("grp:"):
+                if x[4:] in ids:
+                    out.append("grp:" + ids[x[4:]])
+            else:
+                out.append(x)
+        c.execute("UPDATE contents SET targets=? WHERE id=?", (json.dumps(out), cid))
+    for email, scope in c.execute("SELECT email, scope FROM admins").fetchall():
+        try:
+            sc = json.loads(scope or "{}")
+        except Exception:
+            sc = {}
+        sc["groups"] = [ids[x] for x in sc.get("groups", []) if x in ids]
+        c.execute("UPDATE admins SET scope=? WHERE email=?", (json.dumps(sc), email))
 
 
 init_db()
@@ -252,7 +303,7 @@ def scope_ids(u):
     ids = set(u["screens"])
     if u["groups"]:
         q = ",".join("?" * len(u["groups"]))
-        ids |= {r["id"] for r in db().execute(f"SELECT id FROM screens WHERE grp IN ({q})", tuple(u["groups"]))}
+        ids |= {r["screen_id"] for r in db().execute(f"SELECT screen_id FROM group_members WHERE group_id IN ({q})", tuple(u["groups"]))}
     return ids
 
 
@@ -417,9 +468,14 @@ def targets_screen(row, screen_id):
     if screen_id in tg:
         return True
     # grupos: "ori:0|90|180|270" (por orientacion) y "grp:<piso>" (por grupo); incluyen pantallas futuras
-    if any(isinstance(x, str) and x[:4] in ("ori:", "grp:") for x in tg):
-        sc = db().execute("SELECT orientation, grp FROM screens WHERE id=?", (screen_id,)).fetchone()
-        if sc and (("ori:%d" % sc["orientation"]) in tg or (sc["grp"] and ("grp:" + sc["grp"]) in tg)):
+    if any(isinstance(x, str) and x[:4] == "ori:" for x in tg):
+        sc = db().execute("SELECT orientation FROM screens WHERE id=?", (screen_id,)).fetchone()
+        if sc and ("ori:%d" % sc["orientation"]) in tg:
+            return True
+    gids = [x[4:] for x in tg if isinstance(x, str) and x[:4] == "grp:"]
+    if gids:
+        q = ",".join("?" * len(gids))
+        if db().execute(f"SELECT 1 FROM group_members WHERE screen_id=? AND group_id IN ({q})", (screen_id, *gids)).fetchone():
             return True
     return False
 
@@ -459,8 +515,19 @@ def admin_state():
             "ip": r["ip"], "now_id": r["now_id"], "now_title": r["now_title"], "state": r["state"],
             "free_mb": r["free_mb"], "model": r["model"], "android": r["android"], "app": r["app"],
             "cmd": r["cmd"], "app_code": r["app_code"], "owner": bool(r["owner"]) if r["owner"] is not None else None,
-            "upd_sha": r["upd_sha"], "lan_ip": r["lan_ip"], "last_sync": r["last_sync"], "grp": r["grp"] or "",
+            "upd_sha": r["upd_sha"], "lan_ip": r["lan_ip"], "last_sync": r["last_sync"],
         })
+    vis = {r["id"]: {"id": r["id"], "name": r["name"], "members": []} for r in db().execute("SELECT * FROM groups ORDER BY pos, name")
+           if u["super"] or r["id"] in u["groups"]}
+    sid_ok = {x["id"] for x in screens}
+    for r in db().execute("SELECT group_id, screen_id FROM group_members"):
+        if r["group_id"] in vis and r["screen_id"] in sid_ok:
+            vis[r["group_id"]]["members"].append(r["screen_id"])
+    by_screen = {}
+    for r in db().execute("SELECT group_id, screen_id FROM group_members"):   # todos los grupos de cada pantalla (para saber a qué contenido aplica)
+        by_screen.setdefault(r["screen_id"], []).append(r["group_id"])
+    for x in screens:
+        x["groups"] = by_screen.get(x["id"], [])
     contents = []
     for r in db().execute("SELECT * FROM contents ORDER BY sort, created"):
         if not content_visible(u, r):
@@ -471,7 +538,7 @@ def admin_state():
     return jsonify(screens=screens, contents=contents, me=session["email"], now=now(), is_super=u["super"], version=PANEL_VERSION, build=PANEL_BUILD, started=START_TS,
                    scope={"screens": sorted(u["screens"]), "groups": sorted(u["groups"])},
                    tz=TZ_NAME, max_upload_mb=MAX_UPLOAD_MB, release=get_release() if u["super"] else None,
-                   groups=sorted(u["groups"]) if not u["super"] else GROUPS, open_now=is_open_now())
+                   groups=list(vis.values()), open_now=is_open_now())
 
 
 @app.post("/api/admin/upload")
@@ -559,7 +626,8 @@ def parse_content(body, existing=None):
         f["targets"] = None
     else:
         ids = {r["id"] for r in db().execute("SELECT id FROM screens")}
-        f["targets"] = json.dumps([x for x in tg if x in ids or x in ("ori:0", "ori:90", "ori:180", "ori:270") or (isinstance(x, str) and x.startswith("grp:") and x[4:] in GROUPS)])
+        gids = {r["id"] for r in db().execute("SELECT id FROM groups")}
+        f["targets"] = json.dumps([x for x in tg if x in ids or x in ("ori:0", "ori:90", "ori:180", "ori:270") or (isinstance(x, str) and x.startswith("grp:") and x[4:] in gids)])
     return f, None
 
 
@@ -799,6 +867,9 @@ def check_alerts():
             c.commit()
             return
         down, back = [], []
+        gn = {}
+        for gname, gsid in c.execute("SELECT g.name, m.screen_id FROM group_members m JOIN groups g ON g.id=m.group_id ORDER BY g.pos").fetchall():
+            gn.setdefault(gsid, []).append(gname)
         for r in c.execute("SELECT * FROM screens WHERE status='approved'").fetchall():
             online = bool(r["last_seen"] and t - r["last_seen"] < ONLINE_SECONDS)
             if online:
@@ -808,7 +879,7 @@ def check_alerts():
             elif r["last_seen"] and not r["alerted"]:
                 ref = max(r["last_seen"], since)
                 if t - ref >= minutes * 60:
-                    down.append((r["name"], r["grp"] or "Sin grupo", t - ref))
+                    down.append((r["name"], ", ".join(gn.get(r["id"], [])) or "Sin grupo", t - ref))
                     c.execute("UPDATE screens SET alerted=? WHERE id=?", (t, r["id"]))
         c.commit()
         panel = "https://pantallas.lacole.edu.co"
@@ -914,7 +985,8 @@ def admins_save():
         return jsonify(error="Ese correo ya es el superadministrador"), 400
     ids = {r["id"] for r in db().execute("SELECT id FROM screens WHERE status='approved'")}
     screens = [x for x in (b.get("screens") or []) if x in ids]
-    groups = [x for x in (b.get("groups") or []) if x in GROUPS]
+    gids = {r["id"] for r in db().execute("SELECT id FROM groups")}
+    groups = [x for x in (b.get("groups") or []) if x in gids]
     name = (b.get("name") or "").strip()[:80]
     db().execute("INSERT INTO admins(email,name,scope,created,created_by) VALUES(?,?,?,?,?) "
                  "ON CONFLICT(email) DO UPDATE SET name=excluded.name, scope=excluded.scope",
@@ -983,6 +1055,98 @@ def content_delete(cid):
     return jsonify(ok=True)
 
 
+# ---------------------------------------------------------------- Grupos (solo comunicaciones)
+def set_screen_groups(sid, gids):
+    valid = {r["id"] for r in db().execute("SELECT id FROM groups")}
+    db().execute("DELETE FROM group_members WHERE screen_id=?", (sid,))
+    for gid in dict.fromkeys(x for x in (gids or []) if x in valid):
+        db().execute("INSERT OR IGNORE INTO group_members VALUES (?,?)", (gid, sid))
+
+
+def clean_group_name(name, gid=None):
+    name = re.sub(r"\s+", " ", (name or "").strip())[:40]
+    if not name:
+        return None, "Escribe el nombre del grupo"
+    for r in db().execute("SELECT id, name FROM groups"):
+        if r["id"] != gid and r["name"].lower() == name.lower():
+            return None, "Ya existe un grupo con ese nombre"
+    return name, None
+
+
+@app.post("/api/admin/groups")
+@super_required
+def group_create():
+    name, err = clean_group_name((request.get_json(force=True, silent=True) or {}).get("name"))
+    if err:
+        return jsonify(error=err), 400
+    pos = (db().execute("SELECT COALESCE(MAX(pos), -1) + 1 FROM groups").fetchone()[0])
+    gid = uuid.uuid4().hex[:8]
+    db().execute("INSERT INTO groups VALUES (?,?,?)", (gid, name, pos))
+    db().commit()
+    audit(f"grupo creado: {name}")
+    return jsonify(ok=True, id=gid)
+
+
+@app.patch("/api/admin/groups/<gid>")
+@super_required
+def group_update(gid):
+    r = db().execute("SELECT * FROM groups WHERE id=?", (gid,)).fetchone()
+    if not r:
+        abort(404)
+    b = request.get_json(force=True, silent=True) or {}
+    if "name" in b:
+        name, err = clean_group_name(b.get("name"), gid)
+        if err:
+            return jsonify(error=err), 400
+        db().execute("UPDATE groups SET name=? WHERE id=?", (name, gid))
+        audit(f"grupo renombrado: {r['name']} → {name}")
+    if "members" in b:
+        ok = {x["id"] for x in db().execute("SELECT id FROM screens")}
+        db().execute("DELETE FROM group_members WHERE group_id=?", (gid,))
+        for sid in dict.fromkeys(x for x in (b.get("members") or []) if x in ok):
+            db().execute("INSERT OR IGNORE INTO group_members VALUES (?,?)", (gid, sid))
+        audit(f"miembros del grupo editados: {r['name']}")
+    if b.get("move") in (-1, 1):
+        order = [x["id"] for x in db().execute("SELECT id FROM groups ORDER BY pos, name")]
+        i = order.index(gid)
+        j = i + b["move"]
+        if 0 <= j < len(order):
+            order[i], order[j] = order[j], order[i]
+        for n, x in enumerate(order):
+            db().execute("UPDATE groups SET pos=? WHERE id=?", (n, x))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete("/api/admin/groups/<gid>")
+@super_required
+def group_delete(gid):
+    r = db().execute("SELECT * FROM groups WHERE id=?", (gid,)).fetchone()
+    if not r:
+        abort(404)
+    tag = "grp:" + gid
+    for c in db().execute("SELECT id, targets FROM contents WHERE targets IS NOT NULL").fetchall():
+        try:
+            tg = json.loads(c["targets"])
+        except Exception:
+            continue
+        if tag in tg:
+            db().execute("UPDATE contents SET targets=? WHERE id=?", (json.dumps([x for x in tg if x != tag]), c["id"]))
+    for a in db().execute("SELECT email, scope FROM admins").fetchall():
+        try:
+            sc = json.loads(a["scope"] or "{}")
+        except Exception:
+            continue
+        if gid in sc.get("groups", []):
+            sc["groups"] = [x for x in sc["groups"] if x != gid]
+            db().execute("UPDATE admins SET scope=? WHERE email=?", (json.dumps(sc), a["email"]))
+    db().execute("DELETE FROM group_members WHERE group_id=?", (gid,))
+    db().execute("DELETE FROM groups WHERE id=?", (gid,))
+    db().commit()
+    audit(f"grupo eliminado: {r['name']}")
+    return jsonify(ok=True)
+
+
 @app.post("/api/admin/screens/<sid>/approve")
 @super_required
 def screen_approve(sid):
@@ -994,10 +1158,9 @@ def screen_approve(sid):
     ori = int(body.get("orientation", r["orientation"]))
     if ori not in (0, 90, 180, 270):
         ori = 0
-    grp = (body.get("grp") or r["grp"] or "")
-    if grp not in GROUPS:
-        return jsonify(error="Elige a qué grupo pertenece la pantalla"), 400
-    db().execute("UPDATE screens SET status='approved', name=?, orientation=?, grp=? WHERE id=?", (name, ori, grp, sid))
+    db().execute("UPDATE screens SET status='approved', name=?, orientation=? WHERE id=?", (name, ori, sid))
+    if "groups" in body:
+        set_screen_groups(sid, body.get("groups"))
     db().commit()
     audit(f"pantalla aprobada: {name}")
     return jsonify(ok=True)
@@ -1015,11 +1178,9 @@ def screen_update(sid):
     if ori not in (0, 90, 180, 270):
         return jsonify(error="Orientación inválida"), 400
     sleep = validate_sleep(body.get("sleep", json.loads(r["sleep"])))
-    grp = body.get("grp", r["grp"] or "")
-    if grp and grp not in GROUPS:
-        return jsonify(error="Elige un grupo válido"), 400
-    db().execute("UPDATE screens SET name=?, orientation=?, sleep=?, grp=? WHERE id=?",
-                 (name, ori, json.dumps(sleep), grp, sid))
+    db().execute("UPDATE screens SET name=?, orientation=?, sleep=? WHERE id=?", (name, ori, json.dumps(sleep), sid))
+    if "groups" in body:
+        set_screen_groups(sid, body.get("groups"))
     db().commit()
     audit(f"pantalla editada: {name}")
     return jsonify(ok=True)
@@ -1046,6 +1207,7 @@ def screen_cmd(sid):
 @super_required
 def screen_delete(sid):
     db().execute("DELETE FROM screens WHERE id=?", (sid,))
+    db().execute("DELETE FROM group_members WHERE screen_id=?", (sid,))
     db().commit()
     audit(f"pantalla eliminada: {sid}")
     return jsonify(ok=True)

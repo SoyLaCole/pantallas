@@ -117,6 +117,13 @@ input:focus,select:focus{outline:2px solid var(--p);border-color:var(--p)}
 .modal.wide{width:min(680px,100%)}
 .help h2{margin-top:26px}.help ol{padding-left:20px;line-height:1.7}.help li{margin-bottom:4px}
 .help table{font-size:13px}.help td,.help th{vertical-align:top}
+.tree{border:1px solid var(--bd);border-radius:10px;padding:6px 10px;max-height:340px;overflow:auto;background:var(--card)}
+.tgrp{padding:4px 0;border-bottom:1px solid var(--bd)}.tgrp:last-of-type{border-bottom:0}
+.trow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tcar{border:0;background:none;cursor:pointer;font-size:14px;width:22px;padding:0;color:var(--mut)}
+.tkids{padding:2px 0 6px 30px}.tchild{margin:3px 0}
+.gmem{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:2px 14px}
+details.gcard>summary{list-style:none}details.gcard>summary::-webkit-details-marker{display:none}
 </style>
 </head>
 <body>
@@ -132,6 +139,7 @@ input:focus,select:focus{outline:2px solid var(--p);border-color:var(--p)}
   <button id="t-screens" class="on" onclick="tab('screens')">Pantallas</button>
   <button id="t-contents" onclick="tab('contents')">Contenido</button>
   <button id="t-fallback" onclick="tab('fallback')">Respaldo</button>
+  <button id="t-groups" onclick="tab('groups')" style="display:none">Grupos</button>
   <button id="t-app" onclick="tab('app')">Aplicación</button>
   <button id="t-admins" onclick="tab('admins')" style="display:none">Administradores</button>
   <button id="t-help" onclick="tab('help')">Ayuda</button>
@@ -140,6 +148,7 @@ input:focus,select:focus{outline:2px solid var(--p);border-color:var(--p)}
   <section id="v-screens"></section>
   <section id="v-contents" style="display:none"></section>
   <section id="v-fallback" style="display:none"></section>
+  <section id="v-groups" style="display:none"></section>
   <section id="v-app" style="display:none"></section>
   <section id="v-admins" style="display:none"></section>
   <section id="v-help" class="help" style="display:none"></section>
@@ -150,7 +159,7 @@ input:focus,select:focus{outline:2px solid var(--p);border-color:var(--p)}
 
 <script>
 let S={screens:[],contents:[],now:0};
-const PAGE_VERSION='2.3.1';
+const PAGE_VERSION='2.4.0';
 let TAB='screens';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -165,7 +174,7 @@ async function api(method,url,body){
   return j;
 }
 function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2800)}
-function tab(t){TAB=t;for(const x of['screens','contents','fallback','app','admins','help']){$('v-'+x).style.display=x===t?'':'none';$('t-'+x).classList.toggle('on',x===t)}render()}
+function tab(t){TAB=t;for(const x of['screens','contents','fallback','groups','app','admins','help']){$('v-'+x).style.display=x===t?'':'none';$('t-'+x).classList.toggle('on',x===t)}render()}
 function fmt(ts){return ts?new Date(ts*1000).toLocaleString('es-CO',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):''}
 function ago(ts){if(!ts)return 'nunca';const d=Date.now()/1000-ts;if(d<60)return 'hace unos segundos';if(d<3600)return 'hace '+Math.round(d/60)+' min';if(d<86400)return 'hace '+Math.round(d/3600)+' h';return 'hace '+Math.round(d/86400)+' d'}
 function toLocalInput(ts){if(!ts)return '';const d=new Date(ts*1000);const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes())}
@@ -173,8 +182,8 @@ function fromLocalInput(v){return v?Math.floor(new Date(v).getTime()/1000):null}
 
 async function load(){
   try{S=await api('GET','/api/admin/state');$('me').textContent=S.me+(S.is_super?'':' · acceso limitado');
-    $('stale').style.display=(S.version&&S.version!==PAGE_VERSION)?'':'none';$('t-app').style.display=S.is_super?'':'none';$('t-admins').style.display=S.is_super?'':'none';
-    if(!S.is_super&&(TAB==='app'||TAB==='admins'))tab('screens');
+    $('stale').style.display=(S.version&&S.version!==PAGE_VERSION)?'':'none';$('t-app').style.display=S.is_super?'':'none';$('t-groups').style.display=S.is_super?'':'none';$('t-admins').style.display=S.is_super?'':'none';
+    if(!S.is_super&&(TAB==='app'||TAB==='admins'||TAB==='groups'))tab('screens');
     if(!$('mbg').classList.contains('show'))if(!(TAB==='app'&&APPUP))render();backfill()}catch(e){}
 }
 
@@ -185,9 +194,14 @@ function confirmBox(title,msg,okLabel,fn){
 }
 let GF='';try{GF=localStorage.getItem('gf')||''}catch(e){}
 function setGF(g){GF=g;try{localStorage.setItem('gf',g)}catch(e){}renderScreens()}
-function grpIdx(g){const i=(S.groups||[]).indexOf(g);return i<0?99:i}
-function matchScreens(c){return S.screens.filter(s=>s.status==='approved'&&(!c.targets||c.targets.includes(s.id)||c.targets.includes('ori:'+s.orientation)||(s.grp&&c.targets.includes('grp:'+s.grp))))}
-function playlistOf(s){return S.contents.filter(c=>!c.fallback&&(!c.targets||c.targets.includes(s.id)||c.targets.includes('ori:'+s.orientation)||(s.grp&&c.targets.includes('grp:'+s.grp))))}
+function gName(id){const g=(S.groups||[]).find(x=>x.id===id);return g?g.name:''}
+function gIdx(id){const i=(S.groups||[]).findIndex(x=>x.id===id);return i<0?99:i}
+function sGroups(s){return (s.groups||[]).filter(id=>gName(id)).sort((a,b)=>gIdx(a)-gIdx(b)).map(gName)}
+function sRank(s){return Math.min(99,...(s.groups||[]).map(gIdx))}
+function tHit(c,s){return !c.targets||c.targets.includes(s.id)||c.targets.includes('ori:'+s.orientation)||(s.groups||[]).some(g=>c.targets.includes('grp:'+g))}
+function matchScreens(c){return S.screens.filter(s=>s.status==='approved'&&tHit(c,s))}
+function playlistOf(s){return S.contents.filter(c=>!c.fallback&&tHit(c,s))}
+function byName(a,b){return a.name.localeCompare(b.name,'es',{numeric:true})}
 /* ---------------- Pantallas ---------------- */
 function copyText(t){try{navigator.clipboard.writeText(t).then(()=>toast('Copiado: '+t),()=>toast(t))}catch(e){toast(t)}}
 function renderScreens(){
@@ -199,17 +213,18 @@ function renderScreens(){
       <div class="kv"><span>Código</span><span>${esc(s.id.slice(0,8))}</span><span>Equipo</span><span>${esc(s.model||'—')} ${s.android?'· Android '+esc(s.android):''}</span><span>Red</span><span>${esc(s.ip||'—')}</span><span>Visto</span><span>${ago(s.last_seen)}</span></div>
       <div class="row"><button class="btn pri" onclick="approveModal('${s.id}')">Aprobar</button><button class="btn bad" onclick="delScreen('${s.id}')">Rechazar</button></div></div>`).join('')+'</div>';
   }
-  if(!S.is_super){const gl=(S.scope&&S.scope.groups||[]),n=(S.scope&&S.scope.screens||[]).length;
+  if(!S.is_super){const gl=(S.scope&&S.scope.groups||[]).map(gName).filter(Boolean),n=(S.scope&&S.scope.screens||[]).length;
     h+=`<div class="note"><b>Acceso limitado.</b> Puedes subir y gestionar contenido en tus pantallas${gl.length?' (grupos: '+gl.map(esc).join(', ')+')':''}${n?(gl.length?' y ':' ')+n+' pantalla'+(n>1?'s':'')+' asignada'+(n>1?'s':''):''}. Para cambios en las pantallas, la app o los administradores, escribe a comunicaciones@lacole.edu.co.</div>`}
   const groups=(S.groups||[]).slice();
-  const noGrp=all.filter(s=>!s.grp||!groups.includes(s.grp));
-  if(GF&&GF!=='__none'&&!groups.includes(GF))GF='';
+  const inAny=s=>(s.groups||[]).some(id=>gName(id));
+  const noGrp=all.filter(s=>!inAny(s));
+  if(GF&&GF!=='__none'&&!groups.some(g=>g.id===GF))GF='';
   const chip=(g,label,n,on)=>`<button class="chip ${on?'on':''}" onclick="setGF('${g}')">${esc(label)}<i>${n}</i></button>`;
-  const ok=GF===''?all:(GF==='__none'?noGrp:all.filter(s=>s.grp===GF));
-  ok.sort((a,b)=>grpIdx(a.grp)-grpIdx(b.grp)||a.name.localeCompare(b.name,'es',{numeric:true}));
+  const ok=GF===''?all:(GF==='__none'?noGrp:all.filter(s=>(s.groups||[]).includes(GF)));
+  ok.sort((a,b)=>(GF===''?sRank(a)-sRank(b):0)||byName(a,b));
   const on=all.filter(s=>s.online).length;
   h+='<h2>Pantallas <span style="font-weight:600;color:var(--mut);font-size:13px">· '+on+' en línea de '+all.length+(S.open_now?'':' · fuera de horario de funcionamiento')+'</span></h2>';
-  h+='<div class="chips">'+chip('','Todas',all.length,GF==='')+groups.map(g=>chip(g,g,all.filter(s=>s.grp===g).length,GF===g)).join('')+(noGrp.length?chip('__none','Sin grupo',noGrp.length,GF==='__none'):'')+'</div>';
+  h+='<div class="chips">'+chip('','Todas',all.length,GF==='')+groups.map(g=>chip(g.id,g.name,all.filter(s=>(s.groups||[]).includes(g.id)).length,GF===g.id)).join('')+(noGrp.length?chip('__none','Sin grupo',noGrp.length,GF==='__none'):'')+'</div>';
   if(!all.length)h+='<div class="card empty">'+(S.is_super?'Aún no hay pantallas aprobadas.<br>Instala la app en un TV; aparecerá arriba para que la apruebes. Los pasos están en la pestaña Ayuda.':'Todavía no tienes pantallas asignadas. Pídele a comunicaciones@lacole.edu.co que te asigne las que necesitas.')+'</div>';
   else if(!ok.length)h+='<div class="card empty">No hay pantallas en este grupo todavía.</div>';
   else h+='<div class="grid">'+ok.map(s=>{
@@ -222,7 +237,7 @@ function renderScreens(){
       ['Visto',ago(s.last_seen)+(s.ip?' · '+esc(s.ip):'')],
       s.last_sync?['Sincronizó',ago(s.last_sync)]:null].filter(Boolean);
     return `<div class="card scr"><div class="row"><span class="dot ${s.online?'on':''}"></span><h3>${esc(s.name)}</h3><span class="sp"></span><span class="badge ${badge[0]}">${badge[1]}</span></div>
-    ${GF===''&&s.grp?`<div class="s" style="font-size:12px;color:var(--mut);margin:2px 0 0 18px">${esc(s.grp)}</div>`:''}
+    ${GF===''&&sGroups(s).length?`<div class="s" style="font-size:12px;color:var(--mut);margin:2px 0 0 18px">${esc(sGroups(s).join(' · '))}</div>`:''}
     ${s.online?`<div class="now ${s.now_title?'live':''}"><span class="lamp"></span><span class="lbl">Reproduce</span><span class="ttl">${esc(s.now_title||'—')}</span></div>`:''}
     <div class="kv">${rows.map(r=>`<span>${r[0]}</span><span>${r[1]}</span>`).join('')}</div>
     <div class="row" style="flex-wrap:wrap">${S.is_super?`<button class="btn sm bad" onclick="delScreen('${s.id}')">Quitar</button>
@@ -233,10 +248,10 @@ function renderScreens(){
 }
 function playlistModal(id){
   const s=S.screens.find(x=>x.id===id),n=S.now;
-  const list=playlistOf(s),fb=S.contents.filter(c=>c.fallback&&(!c.targets||c.targets.includes(s.id)||c.targets.includes('ori:'+s.orientation)||(s.grp&&c.targets.includes('grp:'+s.grp))));
+  const list=playlistOf(s),fb=S.contents.filter(c=>c.fallback&&tHit(c,s));
   const row=(c,i)=>{const st=statusOf(c);const sched=(c.start_at||c.end_at)?(c.start_at?fmt(c.start_at):'Ya')+' → '+(c.end_at?fmt(c.end_at):'sin fin'):'Indefinida';
     return `<div class="pl"><span class="n">${i?i:''}</span>${thumbHtml(c)}<div style="flex:1;min-width:0"><div class="t">${esc(c.title)}</div><div class="s">${TYPES[c.type]}${c.type==='image'&&c.duration?' · '+c.duration+' s':''} · ${esc(sched)}</div></div><span class="badge ${st[1]}">${st[0]}</span></div>`};
-  openModal(`<h3>Lista de reproducción</h3><div class="s" style="color:var(--mut);margin:-8px 0 8px">${esc(s.name)}${s.grp?' · '+esc(s.grp):''}</div>
+  openModal(`<h3>Lista de reproducción</h3><div class="s" style="color:var(--mut);margin:-8px 0 8px">${esc(s.name)}${sGroups(s).length?' · '+esc(sGroups(s).join(' · ')):''}</div>
   ${list.length?list.map((c,i)=>row(c,i+1)).join(''):'<div class="hint" style="padding:14px 0">Esta pantalla no tiene contenido programado.</div>'}
   ${fb.length?'<div class="hint" style="margin-top:14px"><b>Respaldo</b> (se muestra solo si no hay nada programado)</div>'+fb.map(c=>row(c,0)).join(''):''}
   <div class="row" style="margin-top:18px"><button class="btn pri" onclick="contentModal(null,null,null,'${s.id}')">+ Agregar contenido a esta pantalla</button><span class="sp"></span><button class="btn" onclick="closeModal()">Cerrar</button></div>`);
@@ -245,26 +260,27 @@ function playlistModal(id){
 async function cmd(id,c){try{await api('POST','/api/admin/screens/'+id+'/cmd',{cmd:c});toast('Reinicio enviado');}catch(e){toast(e.message)}}
 function delScreen(id){const s=S.screens.find(x=>x.id===id);confirmBox('Quitar pantalla','La pantalla «'+esc(s.name)+'» dejará de aparecer en el panel. Si el TV sigue encendido con la app, volverá a aparecer como pantalla nueva.','Quitar',async()=>{await api('DELETE','/api/admin/screens/'+id);load()})}
 
-function grpSelect(v){return `<select id="f-grp"><option value="" ${v?'':'selected'}>Elige un grupo…</option>${(S.groups||[]).map(g=>`<option ${g===v?'selected':''}>${esc(g)}</option>`).join('')}</select>`}
+function grpChecks(s){return `<div style="padding:4px 6px;display:flex;flex-wrap:wrap;gap:2px 18px">${(S.groups||[]).map(g=>`<label class="chk"><input type="checkbox" class="fg" value="${g.id}" ${(s.groups||[]).includes(g.id)?'checked':''}> ${esc(g.name)}</label>`).join('')||'<span class="hint">Aún no hay grupos. Créalos en la pestaña Grupos.</span>'}</div>`}
+function grpPicked(){return [...document.querySelectorAll('.fg:checked')].map(x=>x.value)}
 function oriSelect(v){return `<select id="f-ori">${[[0,'Horizontal'],[90,'Vertical – giro horario (90°)'],[270,'Vertical – giro antihorario (270°)'],[180,'Horizontal invertida']].map(o=>`<option value="${o[0]}" ${o[0]===v?'selected':''}>${o[1]}</option>`).join('')}</select>`}
 function approveModal(id){
   const s=S.screens.find(x=>x.id===id);
   openModal(`<h3>Aprobar pantalla</h3><label>Nombre</label><input type="text" id="f-name" value="${esc(s.name)}" placeholder="Ej.: Recepción piso 2">
-  <label>Grupo (piso o zona)</label>${grpSelect(s.grp)}
+  <label>Grupos (puede estar en varios)</label>${grpChecks(s)}
   <label>Orientación</label>${oriSelect(s.orientation)}
   <div class="hint">Si el TV está de lado, elige un giro vertical. Si se ve de cabeza, cambia al otro giro vertical.</div><div class="err" id="err"></div>
   <div class="row" style="margin-top:18px"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" onclick="doApprove('${id}')">Aprobar</button></div>`);
 }
-async function doApprove(id){try{await api('POST','/api/admin/screens/'+id+'/approve',{name:$('f-name').value,orientation:+$('f-ori').value,grp:$('f-grp').value});closeModal();load()}catch(e){$('err').textContent=e.message}}
+async function doApprove(id){try{await api('POST','/api/admin/screens/'+id+'/approve',{name:$('f-name').value,orientation:+$('f-ori').value,groups:grpPicked()});closeModal();load()}catch(e){$('err').textContent=e.message}}
 function editScreen(id){
   const s=S.screens.find(x=>x.id===id);
   openModal(`<h3>Editar pantalla</h3><label>Nombre</label><input type="text" id="f-name" value="${esc(s.name)}">
-  <label>Grupo (piso o zona)</label>${grpSelect(s.grp)}
+  <label>Grupos (puede estar en varios)</label>${grpChecks(s)}
   <label>Orientación</label>${oriSelect(s.orientation)}
   <div class="err" id="err"></div>
   <div class="row" style="margin-top:18px"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" onclick="saveScreen('${id}')">Guardar</button></div>`);
 }
-async function saveScreen(id){try{await api('PATCH','/api/admin/screens/'+id,{name:$('f-name').value,orientation:+$('f-ori').value,grp:$('f-grp').value,sleep:[]});closeModal();load()}catch(e){$('err').textContent=e.message}}
+async function saveScreen(id){try{await api('PATCH','/api/admin/screens/'+id,{name:$('f-name').value,orientation:+$('f-ori').value,groups:grpPicked(),sleep:[]});closeModal();load()}catch(e){$('err').textContent=e.message}}
 
 /* ---------------- Contenido ---------------- */
 function statusOf(c){
@@ -278,14 +294,14 @@ const TYPES={video:'Video',image:'Imagen',web:'Página web'};
 const OGRP={0:'Horizontales',90:'Verticales 90°',270:'Verticales 270°',180:'Horizontales invertidas'};
 function targetText(c){
   if(!c.targets)return 'Todas las pantallas';
-  const parts=c.targets.map(id=>id.startsWith('ori:')?'Todas las '+OGRP[+id.slice(4)].toLowerCase():id.startsWith('grp:')?id.slice(4):(S.screens.find(s=>s.id===id)||{}).name).filter(Boolean);
+  const parts=c.targets.map(id=>id.startsWith('ori:')?'Todas las '+OGRP[+id.slice(4)].toLowerCase():id.startsWith('grp:')?gName(id.slice(4)):(S.screens.find(s=>s.id===id)||{}).name).filter(Boolean);
   return parts.length?parts.join(', '):'Ninguna pantalla'}
 function targetShort(c){
   if(!c.targets)return 'Todas';
   const n=matchScreens(c);
   if(!n.length)return 'Ninguna pantalla';
   const onlyGroups=c.targets.every(t=>t.startsWith('grp:')||t.startsWith('ori:'));
-  if(onlyGroups)return c.targets.map(t=>t.startsWith('grp:')?t.slice(4):OGRP[+t.slice(4)]).join(', ');
+  if(onlyGroups)return c.targets.map(t=>t.startsWith('grp:')?gName(t.slice(4)):OGRP[+t.slice(4)]).filter(Boolean).join(', ');
   return n.length===1?n[0].name:n.length+' pantallas'}
 const ICON={video:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg>',
  image:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg>',
@@ -399,7 +415,7 @@ function renderAdmins(){
   <div class="row" style="margin-bottom:14px"><button class="btn pri" onclick="adminModal()">+ Agregar administrador</button></div>
   <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>Administrador</th><th>Acceso</th><th></th></tr></thead><tbody>`+
   ADMINS.map(a=>{
-    const acc=a.super?'<span class="badge ok">Todo el panel</span>':((a.groups.length?a.groups.map(g=>`<span class="badge">${esc(g)}</span>`).join(' ')+' ':'')+a.screens.map(id=>{const s=scr.find(x=>x.id===id);return `<span class="badge gray">${esc(s?s.name:'pantalla quitada')}</span>`}).join(' ')||'<span class="badge warn">Sin pantallas asignadas</span>');
+    const acc=a.super?'<span class="badge ok">Todo el panel</span>':((a.groups.length?a.groups.filter(gName).map(g=>`<span class="badge">${esc(gName(g))}</span>`).join(' ')+' ':'')+a.screens.map(id=>{const s=scr.find(x=>x.id===id);return `<span class="badge gray">${esc(s?s.name:'pantalla quitada')}</span>`}).join(' ')||'<span class="badge warn">Sin pantallas asignadas</span>');
     return `<tr><td><div class="t">${esc(a.email)}</div><div class="s">${esc(a.name||(a.super?'Superadministrador':''))}</div></td><td><div style="display:flex;flex-wrap:wrap;gap:4px">${acc}</div></td>
     <td>${a.super?'':`<button class="btn sm" onclick="adminModal('${esc(a.email)}')">Editar</button> <button class="btn sm bad" onclick="delAdmin('${esc(a.email)}')">Quitar</button>`}</td></tr>`}).join('')+'</tbody></table></div>';
   $('v-admins').innerHTML=h;
@@ -411,9 +427,9 @@ function adminModal(email){
   <label>Correo de Google</label><input type="email" id="ad-email" value="${esc(a?a.email:'')}" ${a?'disabled':''} placeholder="nombre@lacole.edu.co">
   <label>Nombre (opcional)</label><input type="text" id="ad-name" value="${esc(a?a.name:'')}">
   <label>Grupos completos (incluye las pantallas que se agreguen después)</label>
-  <div style="padding-left:6px">${groups.map(g=>`<label class="chk"><input type="checkbox" class="adg" value="${esc(g)}" ${a&&a.groups.includes(g)?'checked':''}> ${esc(g)} <span class="badge gray">${scr.filter(s=>s.grp===g).length}</span></label>`).join('')}</div>
+  <div style="padding-left:6px">${groups.map(g=>`<label class="chk"><input type="checkbox" class="adg" value="${g.id}" ${a&&a.groups.includes(g.id)?'checked':''}> ${esc(g.name)} <span class="badge gray">${scr.filter(s=>(s.groups||[]).includes(g.id)).length}</span></label>`).join('')}</div>
   <label>Pantallas sueltas</label>
-  <div style="padding-left:6px;max-height:220px;overflow:auto">${scr.map(s=>`<label class="chk"><input type="checkbox" class="ads" value="${s.id}" ${a&&a.screens.includes(s.id)?'checked':''}> ${esc(s.name)} <span class="badge gray">${esc(s.grp||'sin grupo')}</span></label>`).join('')}</div>
+  <div style="padding-left:6px;max-height:220px;overflow:auto">${scr.map(s=>`<label class="chk"><input type="checkbox" class="ads" value="${s.id}" ${a&&a.screens.includes(s.id)?'checked':''}> ${esc(s.name)} <span class="badge gray">${esc(sGroups(s).join(', ')||'sin grupo')}</span></label>`).join('')}</div>
   <div class="err" id="ad-err"></div>
   <div class="row" style="margin-top:18px"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" onclick="saveAdmin()">Guardar</button></div>`);
 }
@@ -547,8 +563,12 @@ function contentModal(id,file,mode,presetScreen){
   FBMODE=c?c.fallback:(mode==='fb');
   const type=c?c.type:(file?(/\.(jpe?g|png|webp|gif)$/i.test(file.name)?'image':'video'):'video');
   const appr=S.screens.filter(s=>s.status==='approved');
-  let tgmode=presetScreen?'sel':((!c||!c.targets)?'all':(c.targets.some(x=>x.startsWith('grp:'))?'grp':(c.targets.some(x=>x.startsWith('ori:'))?'ori':'sel')));
-  if(!S.is_super&&(tgmode==='all'||tgmode==='ori'))tgmode=(S.groups||[]).length&&!presetScreen&&!c?'grp':'sel';
+  let tgmode=presetScreen?'sel':((!c||!c.targets)?(S.is_super?'all':'sel'):'sel');
+  SEL={g:new Set(),s:new Set(),o:new Set()};EXP=new Set();
+  if(c&&c.targets)c.targets.forEach(t=>{if(t.startsWith('grp:'))SEL.g.add(t.slice(4));else if(t.startsWith('ori:'))SEL.o.add(t);else SEL.s.add(t)});
+  if(presetScreen)SEL.s.add(presetScreen);
+  appr.forEach(sc=>{if(SEL.s.has(sc.id))(sc.groups||[]).forEach(g=>EXP.add(g))});SEL.g.forEach(g=>EXP.add(g));
+  if(!SEL.s.size&&!SEL.g.size&&(S.groups||[]).length===1)EXP.add(S.groups[0].id);
   const range=!!(c&&(c.start_at||c.end_at));
   openModal(`<h3>${FBMODE?(c?'Editar contenido de respaldo':'Subir contenido de respaldo'):(c?'Editar contenido':'Agregar contenido')}</h3>
   ${FBMODE?'<div class="note" style="margin-bottom:6px">Se muestra solo cuando la pantalla no tiene nada programado.</div>':''}
@@ -563,16 +583,12 @@ function contentModal(id,file,mode,presetScreen){
   <div id="f-datebox" class="two"><div><label>Empieza</label><input type="datetime-local" id="f-start" value="${toLocalInput(c&&c.start_at)}"></div><div><label>Termina</label><input type="datetime-local" id="f-end" value="${toLocalInput(c&&c.end_at)}"></div></div>
   <div id="f-datehint" class="hint">Deja «Empieza» vacío para publicar de inmediato, o «Termina» vacío si no tiene fecha de fin.</div></div>
   <label>Pantallas</label>
-  ${S.is_super?`<label class="chk"><input type="radio" name="tg" value="all" ${tgmode==='all'?'checked':''} onchange="tgChanged()"> Todas las pantallas (incluye las que se agreguen después)</label>`:''}
-  ${S.is_super||(S.groups||[]).length?`<label class="chk"><input type="radio" name="tg" value="grp" ${tgmode==='grp'?'checked':''} onchange="tgChanged()"> Por piso o grupo (incluye las que se agreguen después)</label>`:''}
-  <div id="f-tgg" style="padding-left:24px">${(S.groups||[]).map(g=>`<label class="chk"><input type="checkbox" class="tgg" value="grp:${esc(g)}" ${c&&c.targets&&c.targets.includes('grp:'+g)?'checked':''}> ${esc(g)} <span class="badge gray">${appr.filter(s=>s.grp===g).length}</span></label>`).join('')}</div>
-  ${S.is_super?`<label class="chk"><input type="radio" name="tg" value="ori" ${tgmode==='ori'?'checked':''} onchange="tgChanged()"> Por orientación (incluye las que se agreguen después)</label>`:''}
-  <div id="f-tgo" style="padding-left:24px">${[[0,'Todas las horizontales'],[270,'Todas las verticales 270° (girada a la izquierda)'],[90,'Todas las verticales 90° (girada a la derecha)'],[180,'Todas las horizontales invertidas (180°)']].map(([o,l])=>`<label class="chk"><input type="checkbox" class="tgo" value="ori:${o}" ${c&&c.targets&&c.targets.includes('ori:'+o)?'checked':''}> ${l} <span class="badge gray">${appr.filter(s=>s.orientation===o).length}</span></label>`).join('')}</div>
-  <label class="chk"><input type="radio" name="tg" value="sel" ${tgmode==='sel'?'checked':''} onchange="tgChanged()"> Solo algunas pantallas</label>
-  <div id="f-tgs" style="padding-left:24px">${appr.map(s=>`<label class="chk"><input type="checkbox" class="tgc" value="${s.id}" ${(c&&c.targets&&c.targets.includes(s.id))||presetScreen===s.id?'checked':''}> ${esc(s.name)} <span class="badge gray">${ORI_SHORT[s.orientation]||'horizontal'}</span></label>`).join('')||'<div class="hint">No hay pantallas aprobadas.</div>'}</div>
+  ${S.is_super?`<label class="chk"><input type="radio" name="tg" value="all" ${tgmode==='all'?'checked':''} onchange="tgChanged()"> Todas las pantallas (incluye las que se agreguen después)</label>
+  <label class="chk"><input type="radio" name="tg" value="sel" ${tgmode==='sel'?'checked':''} onchange="tgChanged()"> Elegir grupos o pantallas</label>`:`<input type="radio" name="tg" value="sel" checked style="display:none">`}
+  <div id="f-tree" class="tree"></div>
   <div class="prog" id="prog"><i></i></div><div class="err" id="err"></div>
   <div class="row" style="margin-top:18px"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" id="savebtn" onclick="saveContent(${c?`'${c.id}'`:'null'})">${c?'Guardar':(FBMODE?'Subir':'Subir y publicar')}</button></div>`);
-  $('f-type').value=type;typeChanged();schChanged();tgChanged();if(PICKED)checkVideo(PICKED);
+  $('f-type').value=type;typeChanged();schChanged();paintTree();tgChanged();if(PICKED)checkVideo(PICKED);
 }
 function typeChanged(){
   const t=$('f-type').value,edit=$('f-type').disabled;
@@ -584,7 +600,34 @@ function schChanged(){
   const r=document.querySelector('input[name=sch]:checked').value==='range';
   $('f-datebox').style.display=r?'':'none';$('f-datehint').style.display=r?'':'none';
 }
-function tgChanged(){const v=document.querySelector('input[name=tg]:checked').value;$('f-tgg').style.display=v==='grp'?'':'none';$('f-tgs').style.display=v==='sel'?'':'none';$('f-tgo').style.display=v==='ori'?'':'none'}
+let SEL={g:new Set(),s:new Set(),o:new Set()},EXP=new Set();
+function tgChanged(){const v=document.querySelector('input[name=tg]:checked').value;$('f-tree').style.display=v==='sel'?'':'none'}
+function covered(sc){return (sc.groups||[]).some(g=>SEL.g.has(g))}
+function paintTree(){
+  const appr=S.screens.filter(x=>x.status==='approved').sort(byName),G=S.groups||[];
+  const scr=sc=>{const cov=covered(sc),on=cov||SEL.s.has(sc.id);
+    return `<label class="chk tchild"><input type="checkbox" ${on?'checked':''} ${cov?'disabled':''} onchange="tgScreen('${sc.id}',this.checked)"> ${esc(sc.name)} <span class="badge gray">${ORI_SHORT[sc.orientation]||'horizontal'}</span></label>`};
+  let h='';
+  G.forEach(g=>{
+    const mem=appr.filter(sc=>(sc.groups||[]).includes(g.id));
+    const eff=mem.filter(sc=>SEL.s.has(sc.id)||covered(sc)).length,open=EXP.has(g.id);
+    h+=`<div class="tgrp"><div class="trow"><button type="button" class="tcar" onclick="tgToggle('${g.id}')" aria-label="Mostrar pantallas">${open?'▾':'▸'}</button>
+    <label class="chk" style="margin:0"><input type="checkbox" class="gcb" data-ind="${!SEL.g.has(g.id)&&eff>0?1:0}" ${SEL.g.has(g.id)?'checked':''} onchange="tgGroup('${g.id}',this.checked)"> <b>${esc(g.name)}</b></label>
+    <span class="badge gray">${SEL.g.has(g.id)?'todas ('+mem.length+')':(eff?eff+' de '+mem.length:mem.length+' pantalla'+(mem.length===1?'':'s'))}</span></div>
+    ${open?`<div class="tkids">${mem.map(scr).join('')||'<div class="hint">Este grupo no tiene pantallas.</div>'}</div>`:''}</div>`});
+  const free=appr.filter(sc=>!(sc.groups||[]).some(id=>gName(id)));
+  if(free.length)h+=`<div class="tgrp"><div class="trow"><button type="button" class="tcar" onclick="tgToggle('__none')">${EXP.has('__none')?'▾':'▸'}</button><b style="font-size:14px">Sin grupo</b><span class="badge gray">${free.length}</span></div>${EXP.has('__none')?`<div class="tkids">${free.map(scr).join('')}</div>`:''}</div>`;
+  if(!G.length&&!free.length)h='<div class="hint">No hay pantallas aprobadas.</div>';
+  const nS=appr.filter(sc=>SEL.s.has(sc.id)||covered(sc)||SEL.o.has('ori:'+sc.orientation)).length;
+  h+=[...SEL.o].map(o=>`<span class="badge warn" style="margin:6px 6px 0 0">Todas las ${esc((OGRP[+o.slice(4)]||'').toLowerCase())} <a href="#" onclick="tgOri('${o}');return false" style="text-decoration:none">✕</a></span>`).join('');
+  h+=`<div class="hint" style="margin-top:8px"><b>${nS}</b> pantalla${nS===1?'':'s'} recibirán este contenido${SEL.g.size?' (los grupos marcados incluyen las pantallas que se agreguen después)':''}.</div>`;
+  $('f-tree').innerHTML=h;
+  document.querySelectorAll('#f-tree .gcb').forEach(x=>x.indeterminate=x.dataset.ind==='1');
+}
+function tgToggle(g){EXP.has(g)?EXP.delete(g):EXP.add(g);paintTree()}
+function tgGroup(g,on){if(on){SEL.g.add(g);S.screens.forEach(sc=>{if((sc.groups||[]).includes(g))SEL.s.delete(sc.id)});EXP.add(g)}else SEL.g.delete(g);paintTree()}
+function tgScreen(id,on){on?SEL.s.add(id):SEL.s.delete(id);paintTree()}
+function tgOri(o){SEL.o.delete(o);paintTree()}
 function checkVideo(f){
   const w=$('f-vwarn');if(!w)return;w.innerHTML='';
   if(!f||!/\.(mp4|m4v|mov|webm|mkv)$/i.test(f.name))return;
@@ -605,8 +648,8 @@ async function saveContent(id){
     url:$('f-url').value,start_at:always?null:fromLocalInput($('f-start').value),end_at:always?null:fromLocalInput($('f-end').value),
     targets:null};
   const tgm=document.querySelector('input[name=tg]:checked').value;
-  if(tgm!=='all')body.targets=[...document.querySelectorAll(tgm==='ori'?'.tgo:checked':tgm==='grp'?'.tgg:checked':'.tgc:checked')].map(x=>x.value);
-  if(body.targets&&!body.targets.length){$('err').textContent=tgm==='ori'?'Elige al menos una orientación':tgm==='grp'?'Elige al menos un piso o grupo':'Elige al menos una pantalla';return}
+  if(tgm!=='all')body.targets=[...[...SEL.g].map(g=>'grp:'+g),...SEL.s,...SEL.o];
+  if(body.targets&&!body.targets.length){$('err').textContent='Elige al menos un grupo o una pantalla';return}
   btn.disabled=true;
   try{
     if(id){await api('PATCH','/api/admin/contents/'+id,body)}
@@ -624,10 +667,46 @@ async function saveContent(id){
   }catch(e){$('err').textContent=e.message;btn.disabled=false}
 }
 
+/* ---------------- Grupos (solo comunicaciones) ---------------- */
+let GSIG='',OPENG=new Set();
+function renderGroups(force){
+  if(!S.is_super)return;
+  const a=document.activeElement;
+  if(!force&&a&&a.tagName==='INPUT'&&a.type==='text'&&$('v-groups').contains(a))return;
+  const scr=S.screens.filter(x=>x.status==='approved').sort(byName),G=S.groups||[];
+  const sig=JSON.stringify([G,scr.map(x=>[x.id,x.name,x.groups,x.online])]);
+  if(!force&&sig===GSIG)return;GSIG=sig;
+  let h=`<div class="note"><b>Grupos y nombres.</b> Una pantalla puede estar en varios grupos a la vez (por ejemplo, un Pasillo de la fama también está en «Segundo piso»). Los grupos se usan para filtrar las pantallas y para elegir a quién va un contenido. Los cambios se guardan al instante. «Todas» siempre existe y no necesita configuración.</div>
+  <h2>Grupos</h2>
+  <div class="card" style="margin-bottom:14px"><div class="row"><input type="text" id="g-new" placeholder="Nombre del nuevo grupo" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')createGroup()"><button class="btn pri" onclick="createGroup()">+ Crear grupo</button></div></div>`;
+  h+=G.map((g,i)=>{
+    const mem=new Set(g.members);
+    return `<details class="card gcard" ${OPENG.has(g.id)?'open':''} ontoggle="grpToggled('${g.id}',this.open)" style="margin-bottom:10px"><summary class="row" style="cursor:pointer;gap:10px"><b style="font-size:15px">${esc(g.name)}</b><span class="badge gray">${g.members.length} pantalla${g.members.length===1?'':'s'}</span></summary>
+    <div class="row" style="margin:12px 0 8px;flex-wrap:wrap"><input type="text" id="gn-${g.id}" value="${esc(g.name)}" maxlength="40" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')renameGroup('${g.id}')">
+      <button class="btn sm pri" onclick="renameGroup('${g.id}')">Guardar nombre</button>
+      <button class="btn sm" ${i?'':'disabled'} onclick="moveGroup('${g.id}',-1)" title="Subir">▲</button><button class="btn sm" ${i<G.length-1?'':'disabled'} onclick="moveGroup('${g.id}',1)" title="Bajar">▼</button>
+      <button class="btn sm bad" onclick="deleteGroup('${g.id}')">Eliminar grupo</button></div>
+    <div class="hint" style="margin:6px 0">Pantallas de este grupo:</div>
+    <div class="gmem" id="gm-${g.id}">${scr.map(sc=>`<label class="chk"><input type="checkbox" value="${sc.id}" ${mem.has(sc.id)?'checked':''} onchange="saveMembers('${g.id}')"> ${esc(sc.name)} <span class="badge gray">${ORI_SHORT[sc.orientation]||'horizontal'}</span></label>`).join('')}</div></details>`}).join('')||'<div class="card empty">Aún no hay grupos.</div>';
+  h+=`<h2 style="margin-top:26px">Nombres de las pantallas</h2><div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>Pantalla</th><th>Grupos</th><th></th></tr></thead><tbody>`+
+  scr.map(sc=>`<tr><td><input type="text" id="sn-${sc.id}" value="${esc(sc.name)}" maxlength="60" style="min-width:200px" onkeydown="if(event.key==='Enter')renameScreen('${sc.id}')"><div class="s" style="margin-top:3px">${sc.online?'En línea':'Sin conexión'}${sc.lan_ip?' · '+esc(sc.lan_ip):''}</div></td>
+  <td><div style="display:flex;flex-wrap:wrap;gap:4px">${sGroups(sc).map(n=>`<span class="badge">${esc(n)}</span>`).join('')||'<span class="badge warn">Sin grupo</span>'}</div></td>
+  <td><button class="btn sm pri" onclick="renameScreen('${sc.id}')">Guardar nombre</button></td></tr>`).join('')+'</tbody></table></div>';
+  $('v-groups').innerHTML=h;
+}
+function grpToggled(id,o){o?OPENG.add(id):OPENG.delete(id)}
+async function grpDo(fn,msg){try{await fn();if(msg)toast(msg);await load();renderGroups(true)}catch(e){toast(e.message)}}
+function createGroup(){const n=$('g-new').value.trim();if(!n)return toast('Escribe el nombre del grupo');grpDo(async()=>{const r=await api('POST','/api/admin/groups',{name:n});OPENG.add(r.id)},'Grupo creado')}
+function renameGroup(id){grpDo(()=>api('PATCH','/api/admin/groups/'+id,{name:$('gn-'+id).value}),'Nombre guardado')}
+function moveGroup(id,d){grpDo(()=>api('PATCH','/api/admin/groups/'+id,{move:d}))}
+function saveMembers(id){const m=[...document.querySelectorAll('#gm-'+id+' input:checked')].map(x=>x.value);grpDo(()=>api('PATCH','/api/admin/groups/'+id,{members:m}),'Guardado')}
+function deleteGroup(id){const g=(S.groups||[]).find(x=>x.id===id);confirmBox('Eliminar grupo','El grupo «'+esc(g.name)+'» se eliminará. Las pantallas no se borran, pero los contenidos dirigidos a este grupo dejarán de llegar a ellas (revisa la pestaña Contenido) y los administradores perderán el acceso que tenían por este grupo.','Eliminar',()=>grpDo(()=>api('DELETE','/api/admin/groups/'+id),'Grupo eliminado'))}
+function renameScreen(id){const n=$('sn-'+id).value.trim();if(!n)return toast('El nombre no puede estar vacío');grpDo(()=>api('PATCH','/api/admin/screens/'+id,{name:n}),'Nombre guardado')}
+
 /* ---------------- Modal / render ---------------- */
 function openModal(h){$('modal').className='modal';$('modal').innerHTML=h;$('mbg').classList.add('show')}
 function closeModal(){$('mbg').classList.remove('show');render()}
-function render(){if(TAB==='screens')renderScreens();else if(TAB==='contents')renderContents();else if(TAB==='app')renderApp();else if(TAB==='admins')renderAdmins();else if(TAB==='help')renderHelp();else renderFallback()}
+function render(){if(TAB==='groups'){renderGroups();return}if(TAB==='screens')renderScreens();else if(TAB==='contents')renderContents();else if(TAB==='app')renderApp();else if(TAB==='admins')renderAdmins();else if(TAB==='help')renderHelp();else renderFallback()}
 load();setInterval(load,5000);
 </script>
 </body>
