@@ -9,3 +9,7 @@ __pycache__/
 .idea/
 *.iml
 local.properties
+
+.idea/
+*.iml
+local.properties
