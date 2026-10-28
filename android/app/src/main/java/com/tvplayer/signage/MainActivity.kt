@@ -81,6 +81,8 @@ class MainActivity : Activity(), SyncManager.Listener {
     private var geoRot = -1
 
     private var infoUntil = 0L
+    private var blackout: View? = null
+    private var blackoutUntil = 0L
     private var tickCount = 0
 
     private val tick = object : Runnable {
@@ -268,8 +270,18 @@ class MainActivity : Activity(), SyncManager.Listener {
 
     private fun onTick() {
         tickCount++
+        if (blackout != null) {
+            if (Clock.now() >= blackoutUntil) endBlackout()
+            return
+        }
         val list = playlist()
         listSize = list.size
+        // Si la lista cambia mientras suena un video (p. ej. llegan videos nuevos), el modo de repeticion
+        // debe cambiar tambien; si no, un video que empezo solo se repetiria para siempre.
+        player?.let { pl ->
+            val want = if (list.size <= 1) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+            if (pl.repeatMode != want) pl.repeatMode = want
+        }
         if (list.isEmpty()) {
             if (current != null) {
                 current = null
@@ -545,7 +557,45 @@ class MainActivity : Activity(), SyncManager.Listener {
 
     private fun doSleep() {
         val r = PowerControl.sleepNow(this)
-        sync?.note = if (r == "ok") "" else "Apagado: $r"
+        if (r == "ok") {
+            sync?.note = ""
+        } else {
+            // Este TV no permite apagar la pantalla por software: se deja en negro.
+            startBlackout()
+        }
+    }
+
+    /** Pantalla en negro y sin sonido hasta las 6:00 (hora del servidor) o hasta pulsar una tecla. */
+    private fun startBlackout() {
+        if (blackout != null) return
+        restartContent()
+        val v = View(this)
+        v.setBackgroundColor(Color.BLACK)
+        root.addView(v, FrameLayout.LayoutParams(-1, -1))
+        v.bringToFront()
+        blackout = v
+        val tz = TimeZone.getTimeZone(manifest?.tz ?: "America/Bogota")
+        val cal = Calendar.getInstance(tz)
+        cal.timeInMillis = Clock.now()
+        cal.set(Calendar.HOUR_OF_DAY, 6)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        if (cal.timeInMillis <= Clock.now()) cal.add(Calendar.DAY_OF_YEAR, 1)
+        blackoutUntil = cal.timeInMillis
+        val lp = window.attributes
+        lp.screenBrightness = 0.01f
+        window.attributes = lp
+    }
+
+    private fun endBlackout() {
+        val v = blackout ?: return
+        root.removeView(v)
+        blackout = null
+        blackoutUntil = 0L
+        val lp = window.attributes
+        lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        window.attributes = lp
+        restartContent()
     }
 
     /** Apaga el TV a la hora programada (zona horaria que indica el servidor). */
@@ -577,6 +627,10 @@ class MainActivity : Activity(), SyncManager.Listener {
 
     override fun dispatchKeyEvent(e: KeyEvent): Boolean {
         val code = e.keyCode
+        if (blackout != null) {
+            if (e.action == KeyEvent.ACTION_UP) endBlackout()
+            return true
+        }
         if (code == KeyEvent.KEYCODE_BACK) {
             if (e.action == KeyEvent.ACTION_DOWN) {
                 if (e.repeatCount == 0) handler.postDelayed(menuRunnable, 3000)
@@ -645,7 +699,10 @@ class MainActivity : Activity(), SyncManager.Listener {
 
     private fun testSleep() {
         val r = PowerControl.sleepNow(this)
-        if (r != "ok") Toast.makeText(this, r, Toast.LENGTH_LONG).show()
+        if (r != "ok") {
+            Toast.makeText(this, "Este TV no apaga la pantalla: se deja en negro (cualquier tecla la enciende)", Toast.LENGTH_LONG).show()
+            startBlackout()
+        }
     }
 
     private fun requestAdmin() {
