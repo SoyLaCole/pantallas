@@ -24,7 +24,7 @@ DB_PATH = os.path.join(DATA_DIR, "pantallas.db")
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
 CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-PANEL_VERSION = "2.4.0"          # subir este número en cada cambio del panel
+PANEL_VERSION = "2.4.1"          # subir este número en cada cambio del panel
 PANEL_BUILD = "2026-10-28"
 START_TS = time.time()           # momento en que arrancó esta versión del servidor (≈ hora del despliegue)
 SUPER_ADMIN = os.environ.get("SUPER_ADMIN", "comunicaciones@lacole.edu.co").strip().lower()
@@ -601,10 +601,13 @@ def parse_content(body, existing=None):
     if not title:
         return None, "Falta el título"
     f = {"title": title[:120], "type": ctype}
-    start = body.get("start_at")
-    end = body.get("end_at")
-    f["start_at"] = int(start) if start else None
-    f["end_at"] = int(end) if end else None
+    try:
+        start = body.get("start_at")
+        end = body.get("end_at")
+        f["start_at"] = int(start) if start else None
+        f["end_at"] = int(end) if end else None
+    except (TypeError, ValueError):
+        return None, "Las fechas no son válidas"
     if f["start_at"] and f["end_at"] and f["end_at"] <= f["start_at"]:
         return None, "La fecha final debe ser posterior a la inicial"
     f["fallback"] = 1 if body.get("fallback") else 0
@@ -612,7 +615,10 @@ def parse_content(body, existing=None):
         f["start_at"] = f["end_at"] = None
     f["interactive"] = 1 if (ctype == "web" and body.get("interactive")) else 0
     if ctype in ("image", "web"):
-        d = int(body.get("duration") or (10 if ctype == "image" else 30))
+        try:
+            d = int(body.get("duration") or (10 if ctype == "image" else 30))
+        except (TypeError, ValueError):
+            return None, "Los segundos en pantalla no son válidos"
         f["duration"] = max(3, min(d, 3600))
     else:
         f["duration"] = None
@@ -1229,7 +1235,8 @@ def get_screen(sid, create=True):
         abort(400)
     r = db().execute("SELECT * FROM screens WHERE id=?", (sid,)).fetchone()
     if not r and create:
-        n = db().execute("SELECT COUNT(*) FROM screens").fetchone()[0]
+        if db().execute("SELECT COUNT(*) FROM screens WHERE status='pending'").fetchone()[0] >= 30:
+            abort(429)   # tope de pantallas pendientes: evita que alguien llene el panel de pantallas falsas
         db().execute("INSERT INTO screens (id,name,created) VALUES (?,?,?)",
                      (sid, f"Pantalla nueva {sid[:4].upper()}", time.time()))
         db().commit()
@@ -1241,7 +1248,7 @@ def touch(sid, info):
     db().execute(
         "UPDATE screens SET last_seen=?, ip=?, now_id=?, now_title=?, state=?, free_mb=?, model=?, android=?, app=?, "
         "app_code=?, owner=?, upd_sha=?, lan_ip=COALESCE(?, lan_ip) WHERE id=?",
-        (time.time(), request.headers.get("X-Forwarded-For", request.remote_addr),
+        (time.time(), str(request.headers.get("X-Forwarded-For", request.remote_addr) or "")[:100],
          info.get("now_id"), (info.get("now_title") or "")[:120], (info.get("state") or "")[:200],
          info.get("free_mb"), (info.get("model") or "")[:60], (info.get("android") or "")[:20],
          (info.get("app") or "")[:20],
@@ -1267,6 +1274,25 @@ def tv_ping(sid):
     touch(sid, info)
     cmd = take_cmd(sid) if scr["status"] == "approved" else None
     return jsonify(status=scr["status"], cmd=cmd, server_time=int(time.time() * 1000))
+
+
+@app.after_request
+def _security_headers(resp):
+    """Cabeceras de seguridad para el panel (las rutas /tv y /player las usan los televisores y no se tocan)."""
+    p = request.path
+    if not (p.startswith("/tv/") or p.startswith("/player") or p == "/healthz"):
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("X-Frame-Options", "DENY")
+        resp.headers.setdefault("Referrer-Policy", "same-origin")
+        resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        if BASE_URL.startswith("https"):
+            resp.headers.setdefault("Strict-Transport-Security", "max-age=15552000")
+        if resp.mimetype == "text/html":
+            resp.headers.setdefault("Content-Security-Policy",
+                                    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+                                    "img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self' data:; "
+                                    "frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+    return resp
 
 
 @app.after_request

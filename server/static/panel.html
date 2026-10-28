@@ -11,13 +11,13 @@
 body{margin:0;background:var(--bg);color:var(--tx);font-family:'Plus Jakarta Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;letter-spacing:-.003em}
 button,input,select{font-family:inherit}
 header{background:var(--p);color:#fff;display:flex;align-items:center;gap:16px;padding:10px 22px;position:sticky;top:0;z-index:5}
-header img{height:34px;display:block}
+header img{height:34px;display:block}header .me{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}header h1{min-width:0}
 header .sep{width:1px;height:26px;background:#fff6}
 header h1{font-size:16px;margin:0;font-weight:700;flex:1;letter-spacing:-.01em}
 header .me{font-size:12px;opacity:.9}
 header a{color:#fff;font-size:12px;opacity:.85}
-nav{display:flex;gap:4px;padding:14px 22px 0}
-nav button{border:0;background:none;padding:10px 18px;font-size:14px;font-weight:700;color:var(--mut);cursor:pointer;border-bottom:3px solid transparent}
+nav{display:flex;gap:4px;padding:14px 22px 0;overflow-x:auto;white-space:nowrap;scrollbar-width:none}nav::-webkit-scrollbar{display:none}
+nav button{flex:none;border:0;background:none;padding:10px 18px;font-size:14px;font-weight:700;color:var(--mut);cursor:pointer;border-bottom:3px solid transparent}
 nav button.on{color:var(--p);border-color:var(--p)}
 main{padding:16px 22px 60px}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px}
@@ -98,7 +98,7 @@ input:focus,select:focus{outline:2px solid var(--p);border-color:var(--p)}
 .ci span{color:var(--mut);flex:none}
 .ci b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .cact{display:flex;align-items:center;gap:6px}
-@media(max-width:700px){th:nth-child(4),td:nth-child(4){display:none}}
+@media(max-width:700px){header{gap:8px;padding:8px 12px}header .sep,header h1{display:none}nav{padding:10px 8px 0}nav button{padding:10px 12px}main{padding:14px 12px 50px}th:nth-child(4),td:nth-child(4){display:none}}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
 .chip{border:1px solid var(--bd);background:#fff;border-radius:99px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer;color:var(--tx)}
 .chip:hover{border-color:var(--p);color:var(--p)}
@@ -159,7 +159,7 @@ details.gcard>summary{list-style:none}details.gcard>summary::-webkit-details-mar
 
 <script>
 let S={screens:[],contents:[],now:0};
-const PAGE_VERSION='2.4.0';
+const PAGE_VERSION='2.4.1';
 let TAB='screens';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -376,7 +376,7 @@ function renderApp(){
     const ow=s.owner===true?['Lista','ok']:(s.owner===false?['Falta activarla en este TV','bad']:['—','gray']);
     return `<tr><td><div class="t">${esc(s.name)}</div><div class="s">${s.online?'En línea':'Sin conexión'}</div></td>
     <td>${s.app?esc(s.app)+(s.app_code?' ('+s.app_code+')':''):'—'}</td><td><span class="badge ${up[1]}">${up[0]}</span></td><td><span class="badge ${ow[1]}">${ow[0]}</span></td></tr>`}).join('')+'</tbody></table></div>';
-  h+=`<h2>Alertas por correo</h2><div class="card"><div class="row" style="flex-wrap:wrap;gap:14px"><div style="flex:1;min-width:240px;font-size:13px;color:var(--mut)">Recibe un correo cuando una pantalla lleve más de 30 minutos sin conexión dentro del horario de funcionamiento, y otro cuando vuelva.</div><button class="btn pri" onclick="alertsModal()">Configurar alertas</button></div></div>`;
+  h+=`<h2>Alertas por correo</h2><div class="card"><div class="row" style="flex-wrap:wrap;gap:14px"><div style="flex:1;min-width:240px;font-size:13px;color:var(--mut)">Recibe un correo cuando una pantalla lleve varios minutos sin conexión (30 por defecto, se configura) dentro del horario de funcionamiento, y otro cuando vuelva.</div><button class="btn pri" onclick="alertsModal()">Configurar alertas</button></div></div>`;
   h+=`<div class="note" style="margin-top:16px">¿Vas a instalar la app en un televisor nuevo? Los pasos están en la pestaña <b>Ayuda</b>.</div>`;
   $('v-app').innerHTML=h;
 }
@@ -463,6 +463,8 @@ function renderHelp(){
 adb -s 192.168.0.XX:5555 install -r C:\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk</pre>
   <p><b>6. Abrir la app</b> y luego aprobar la pantalla nueva en la pestaña «Pantallas» (nombre y orientación):</p>
   <pre class="cmd">adb -s 192.168.0.XX:5555 shell monkey -p com.tvplayer.signage -c android.intent.category.LAUNCHER 1</pre>
+  <p><b>6b. Para que la app abra sola al encender el TV</b> (y después de cada actualización de la app, que lo borra), déjala como pantalla de inicio. En los TV con «Depuración inalámbrica» (Android 11) primero se usa <code>adb pair</code> con el código que muestra el TV:</p>
+  <pre class="cmd">adb -s 192.168.0.XX:5555 shell cmd package set-home-activity com.tvplayer.signage/.MainActivity</pre>
   <p><b>7. Opcional, actualizaciones sin confirmar en pantalla.</b> Solo funciona en algunos TV (por ejemplo Android 11). El TV no debe tener cuentas de Google (Ajustes → Cuentas). Si da error, no pasa nada: ese TV se actualizará igual, pero pidiendo confirmar con el control. En los TV Android 7.1 («RealtekATV») no funciona.</p>
   <pre class="cmd">adb -s 192.168.0.XX:5555 shell dpm set-device-owner com.tvplayer.signage/.AdminReceiver</pre>
   <p><b>8. Al terminar</b>, desconecta el TV:</p>
@@ -474,7 +476,7 @@ adb -s 192.168.0.XX:5555 install -r C:\\android\\app\\build\\outputs\\apk\\debug
   <b>Datos que necesitas, sin importar la marca del televisor</b>
   <ul style="margin:6px 0 12px;padding-left:20px">
     <li><b>Nombre</b> de la pantalla (por ejemplo «Pasillo de la fama 10»).</li>
-    <li><b>Grupo</b>: Mercadeo, Primer piso, Segundo piso o Tercer piso.</li>
+    <li><b>Grupos</b> a los que pertenece (puede estar en varios, por ejemplo «Pasillo de la Fama» y «Segundo piso»). Se crean y editan en la pestaña <b>Grupos</b>.</li>
     <li><b>Orientación</b>: horizontal, o vertical (giro de 90° o 270°). Si el TV se ve de lado o de cabeza, se corrige aquí, sin tocar el TV.</li>
     <li>El TV debe tener <b>internet estable</b> (wifi o cable) con acceso a <code>pantallas.lacole.edu.co</code>.</li>
     <li>Un <b>computador con Windows en la misma red</b> que el TV, solo para instalar la app una vez.</li>
@@ -483,8 +485,8 @@ adb -s 192.168.0.XX:5555 install -r C:\\android\\app\\build\\outputs\\apk\\debug
   <ol>
     <li>Instala la app en el TV (más abajo: Android o LG).</li>
     <li>Ábrela. El TV muestra un <b>código de 8 caracteres</b> y queda «pendiente de aprobación».</li>
-    <li>En la pestaña <b>Pantallas</b> aparece en «Pantallas nuevas por aprobar». Pulsa <b>Aprobar</b>, ponle nombre, elige grupo y orientación.</li>
-    <li>Asígnale contenido: en la tarjeta de la pantalla, <b>Lista de reproducción → Agregar contenido</b>, o desde la pestaña <b>Contenido</b> eligiendo su piso.</li>
+    <li>En la pestaña <b>Pantallas</b> aparece en «Pantallas nuevas por aprobar». Pulsa <b>Aprobar</b>, ponle nombre, marca sus grupos y elige la orientación.</li>
+    <li>Asígnale contenido: en la tarjeta de la pantalla pulsa <b>+ Contenido</b> (la <b>Lista de reproducción</b> muestra lo que ya tiene), o desde la pestaña <b>Contenido</b> eligiendo grupos o pantallas en el árbol.</li>
     <li>Comprueba que aparezca <b>En línea</b> y «Reproduce».</li>
   </ol>
   <div class="hint">Horario de funcionamiento (el panel lo usa para saber si una pantalla debería estar encendida): lunes a viernes de 6:00 a. m. a 9:30 p. m., sábados y domingos de 6:00 a. m. a 3:30 p. m. Fuera de ese horario, una pantalla apagada aparece como «Fuera de horario» y no como falla.</div>
@@ -529,7 +531,7 @@ function uploadApp(file){
   x.onerror=()=>{APPUP=false;e.textContent='Falló la conexión';$('apkbtn').disabled=false};
   x.send(file);
 }
-async function delApp(){if(!confirm('¿Retirar la versión publicada? Los televisores dejarán de recibirla (no se desinstala nada).'))return;await api('DELETE','/api/admin/app');load()}
+function delApp(){confirmBox('Retirar la versión publicada','Los televisores dejarán de recibirla (no se desinstala nada).','Retirar',async()=>{await api('DELETE','/api/admin/app');load()})}
 /* ---- miniaturas: se generan en el navegador (fotograma del video / reducción de la imagen) ---- */
 function makeThumb(src,kind){
   return new Promise(res=>{
