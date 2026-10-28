@@ -150,7 +150,7 @@ input:focus,select:focus{outline:2px solid var(--p);border-color:var(--p)}
 
 <script>
 let S={screens:[],contents:[],now:0};
-const PAGE_VERSION='2.3.0';
+const PAGE_VERSION='2.3.1';
 let TAB='screens';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -228,7 +228,7 @@ function renderScreens(){
     <div class="row" style="flex-wrap:wrap">${S.is_super?`<button class="btn sm bad" onclick="delScreen('${s.id}')">Quitar</button>
     <button class="btn sm" onclick="cmd('${s.id}','reload')">Reiniciar</button>`:''}
     <button class="btn sm" onclick="playlistModal('${s.id}')">Lista de reproducción</button>
-    <span class="sp"></span>${S.is_super?`<button class="btn pri" onclick="editScreen('${s.id}')">Editar</button>`:`<button class="btn pri" onclick="contentModal(null,null,null,'${s.id}')">+ Contenido</button>`}</div></div>`}).join('')+'</div>';
+    <span class="sp"></span>${S.is_super?`<button class="btn sm" onclick="editScreen('${s.id}')">Editar</button> `:''}<button class="btn pri" onclick="contentModal(null,null,null,'${s.id}')">+ Contenido</button></div></div>`}).join('')+'</div>';
   $('v-screens').innerHTML=h;
 }
 function playlistModal(id){
