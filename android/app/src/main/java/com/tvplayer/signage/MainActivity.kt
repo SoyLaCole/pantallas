@@ -33,6 +33,7 @@ import android.widget.Toast
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import java.io.File
@@ -230,7 +231,10 @@ class MainActivity : Activity(), SyncManager.Listener {
         stage.addView(pv, 0)
         playerView = pv
         textureMode = tex
-        val p = ExoPlayer.Builder(this).build()
+        // Si el decodificador por hardware falla al configurarse (p. ej. Realtek del Almacén),
+        // ExoPlayer prueba automáticamente el siguiente decodificador (software).
+        val rf = DefaultRenderersFactory(this).setEnableDecoderFallback(true)
+        val p = ExoPlayer.Builder(this, rf).build()
         p.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY) videoReady = true
