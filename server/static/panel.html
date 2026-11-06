@@ -44,6 +44,9 @@ h2{font-size:16px;margin:18px 0 10px;font-weight:800;letter-spacing:-.01em}
 .now .lbl{color:var(--mut);flex:none}.now .ttl{font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 code.cp{cursor:pointer;background:#f3f1f6;padding:1px 6px;border-radius:6px}
 code.cp:hover{outline:1px solid var(--p)}
+.cmdw{position:relative}.cmdw pre.cmd{padding-right:44px}
+.cpb{position:absolute;top:6px;right:6px;width:28px;height:28px;padding:0;display:flex;align-items:center;justify-content:center;border:1px solid #d9d4e3;border-radius:7px;background:#fff;color:#5b5470;cursor:pointer}
+.cpb:hover{border-color:var(--p);color:var(--p)}.cpb.ok{color:var(--ok);border-color:var(--ok)}
 pre.cmd{background:#f3f1f6;padding:10px 12px;border-radius:8px;margin:6px 0 10px;overflow:auto;font-size:12.5px;line-height:1.5;white-space:pre-wrap;word-break:break-all}
 .badge{white-space:nowrap;display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;background:var(--pl);color:var(--p)}
 .badge.ok{background:#e3f6ea;color:var(--ok)}.badge.warn{background:#fff3d6;color:var(--warn)}
@@ -159,7 +162,7 @@ details.gcard>summary{list-style:none}details.gcard>summary::-webkit-details-mar
 
 <script>
 let S={screens:[],contents:[],now:0};
-const PAGE_VERSION='2.4.1';
+const PAGE_VERSION='2.5.0';
 let TAB='screens';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -203,6 +206,21 @@ function matchScreens(c){return S.screens.filter(s=>s.status==='approved'&&tHit(
 function playlistOf(s){return S.contents.filter(c=>!c.fallback&&tHit(c,s))}
 function byName(a,b){return a.name.localeCompare(b.name,'es',{numeric:true})}
 /* ---------------- Pantallas ---------------- */
+const SVG0='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+const ICO_COPY=SVG0+'<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
+const ICO_OK=SVG0+'<path d="M5 12l5 5 9-10"/></svg>';
+function cmdCopy(root){
+  root.querySelectorAll('pre.cmd').forEach(pre=>{
+    if(pre.parentNode.classList.contains('cmdw'))return;
+    const w=document.createElement('div');w.className='cmdw';pre.parentNode.insertBefore(w,pre);w.appendChild(pre);
+    const b=document.createElement('button');b.type='button';b.className='cpb';b.title='Copiar comando';b.setAttribute('aria-label','Copiar comando');b.innerHTML=ICO_COPY;
+    b.onclick=()=>copyCmd(pre.textContent,b);w.appendChild(b)})
+}
+function copyCmd(t,b){
+  const done=()=>{b.innerHTML=ICO_OK;b.classList.add('ok');toast('Comando copiado');setTimeout(()=>{b.innerHTML=ICO_COPY;b.classList.remove('ok')},1500)};
+  const fb=()=>{try{const a=document.createElement('textarea');a.value=t;a.style.cssText='position:fixed;opacity:0';document.body.appendChild(a);a.select();const ok=document.execCommand('copy');a.remove();ok?done():toast('No se pudo copiar')}catch(e){toast('No se pudo copiar')}};
+  try{navigator.clipboard.writeText(t).then(done,fb)}catch(e){fb()}
+}
 function copyText(t){try{navigator.clipboard.writeText(t).then(()=>toast('Copiado: '+t),()=>toast(t))}catch(e){toast(t)}}
 function renderScreens(){
   const pend=S.screens.filter(s=>s.status==='pending'),all=S.screens.filter(s=>s.status==='approved');
@@ -329,7 +347,7 @@ function renderContents(){
   $('v-contents').innerHTML=h;
   const d=$('drop');
   d.ondragover=e=>{if(!DRAG){e.preventDefault();d.classList.add('over')}};d.ondragleave=()=>d.classList.remove('over');
-  d.ondrop=e=>{if(DRAG)return;e.preventDefault();d.classList.remove('over');if(e.dataTransfer.files[0])contentModal(null,e.dataTransfer.files[0])};
+  d.ondrop=e=>{if(DRAG)return;e.preventDefault();d.classList.remove('over');if(e.dataTransfer.files.length)contentModal(null,e.dataTransfer.files)};
   const g=$('cgrid');if(g)wireDnD(g);
 }
 let DRAG=null;
@@ -448,28 +466,60 @@ function verCard(){
   <span>Servidor iniciado</span><span>${S.started?fmt(S.started):'—'}</span></div></div>
   <div style="display:flex;align-items:center;gap:10px">${stale?'<span class="badge bad">Tu navegador tiene una versión vieja</span><button class="btn pri" onclick="hardReload()">Recargar ahora</button>':'<span class="badge ok">Al día</span><button class="btn sm" onclick="hardReload()">Recargar</button>'}</div></div></div>`}
 function hardReload(){location.href='/?v='+Date.now()}
+let HSIG='';
+function ipTable(){
+  const scr=S.screens.filter(x=>x.status==='approved').sort(byName);
+  if(!scr.length)return '<div class="card empty">Aún no hay pantallas aprobadas.</div>';
+  return `<div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>Pantalla</th><th>IP en la red</th><th>Estado</th><th>App</th></tr></thead><tbody>`+
+  scr.map(x=>`<tr><td>${esc(x.name)}</td><td>${x.lan_ip?`<code class="cp" title="Clic para copiar la IP" onclick="copyText('${esc(x.lan_ip)}')">${esc(x.lan_ip)}</code>`:'<span class="hint" style="margin:0">—</span>'}</td><td>${x.online?'<span class="badge ok">En línea</span>':'<span class="badge gray">Sin conexión</span>'}</td><td>${esc(x.app||'')}</td></tr>`).join('')+
+  `</tbody></table></div><div class="hint">La IP la reporta cada televisor mientras está en línea. El puerto de la depuración inalámbrica no se guarda aquí porque cambia; se ve en el propio TV.</div>`}
 function renderHelp(){
+  const sig=JSON.stringify([S.version,S.started,S.screens.filter(x=>x.status==='approved').map(x=>[x.id,x.name,x.lan_ip,x.online,x.app])]);
+  if(sig===HSIG&&$('v-help').firstChild)return;HSIG=sig;
   const android=`<div class="card" style="font-size:13px;line-height:1.65">
-  Reemplaza <code>192.168.0.XX</code> por la IP del televisor. Ábrelos en <b>PowerShell</b>, con el computador en la misma red WiFi que el TV.
-  <p><b>1. En el TV</b> (con el control): Ajustes de Android → Información → pulsa <b>OK 7 veces</b> sobre «Compilación» → vuelve atrás → Opciones de desarrollador → activa <b>Depuración USB</b>. Anota la IP en Ajustes → Red (en los TV que ya tienen la app, la IP está en su tarjeta, en «IP en la red»).</p>
+  Reemplaza <code>192.168.0.XX</code> por la IP del televisor (la tabla «IP de cada pantalla» de arriba la muestra para las que ya están instaladas) y <code>PUERTO</code> por el que muestra el TV. Ábrelos en <b>PowerShell</b>, con el computador en la misma red WiFi que el TV. Cada bloque gris tiene un ícono para <b>copiar</b> el comando.
+  <p><b>1. En el TV</b> (con el control): Ajustes de Android → Información → pulsa <b>OK 7 veces</b> sobre «Compilación» → vuelve atrás → Opciones de desarrollador. Activa <b>Depuración USB</b> (Android 7 a 10) o <b>Depuración inalámbrica</b> (Android 11 o superior y Google TV). Anota la IP en Ajustes → Red.</p>
   <p><b>2. Si PowerShell dice que no reconoce «adb»</b> (hay que repetirlo en cada ventana nueva):</p>
   <pre class="cmd">$env:Path += ";$env:LOCALAPPDATA\\Android\\Sdk\\platform-tools"; adb version</pre>
-  <p><b>3. Conectar</b> (la primera vez el TV pregunta «¿Permitir depuración USB?»: elige <b>Permitir siempre</b> con el control):</p>
+  <p><b>3a. Conectar un TV con «Depuración USB»</b> (la primera vez el TV pregunta «¿Permitir depuración USB?»: elige <b>Permitir siempre</b>):</p>
   <pre class="cmd">adb connect 192.168.0.XX:5555</pre>
-  <p><b>4. Comprobar la conexión.</b> Debe aparecer el TV con la palabra <code>device</code>. Si dice <code>unauthorized</code>, acepta el cuadro en el TV; si dice <code>offline</code>, apaga y enciende la Depuración USB del TV y vuelve a conectar.</p>
+  <p><b>3b. Conectar un TV con «Depuración inalámbrica»</b> (Google TV, Android 11 o superior). Estos TV no usan el puerto 5555. La <b>primera vez</b> hay que vincular el computador: en el TV entra a Depuración inalámbrica → <b>Vincular dispositivo con código de sincronización</b> y usa la IP:puerto y el código de 6 dígitos que muestra esa ventana:</p>
+  <pre class="cmd">adb pair 192.168.0.XX:PUERTO_DE_VINCULAR CODIGO</pre>
+  <p>Debe decir <code>Successfully paired</code>. Luego, en la pantalla principal de Depuración inalámbrica (no la de vincular), toma la IP y el puerto que aparecen arriba:</p>
+  <pre class="cmd">adb connect 192.168.0.XX:PUERTO</pre>
+  <div class="hint">El puerto <b>cambia</b> cada vez que se apaga y se vuelve a activar la opción, y la Depuración inalámbrica se apaga sola al reiniciar el TV o cambiar de red. Mientras eso no pase, el mismo puerto sigue sirviendo, y un computador ya vinculado no necesita vincularse otra vez.</div>
+  <p><b>4. Comprobar la conexión.</b> Debe aparecer el TV con la palabra <code>device</code>. Si dice <code>unauthorized</code>, acepta el cuadro en el TV; si dice <code>offline</code>, falta aceptar el aviso en el TV o el puerto cambió: apaga y enciende la depuración del TV y vuelve a conectar.</p>
   <pre class="cmd">adb devices</pre>
-  <p><b>5. Instalar.</b> Debe responder <code>Success</code>. Si tienes varios TV conectados a la vez, agrega <code>-s 192.168.0.XX:5555</code> justo después de <code>adb</code>:</p>
-  <pre class="cmd">adb install -r C:\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk
-adb -s 192.168.0.XX:5555 install -r C:\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk</pre>
+  <p><b>5. Instalar.</b> Debe responder <code>Success</code>. Con un solo TV conectado:</p>
+  <pre class="cmd">adb install -r C:\\pantallas\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk</pre>
+  <p>Con varios TV conectados a la vez, agrega <code>-s IP:PUERTO</code> justo después de <code>adb</code>:</p>
+  <pre class="cmd">adb -s 192.168.0.XX:PUERTO install -r C:\\pantallas\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk</pre>
   <p><b>6. Abrir la app</b> y luego aprobar la pantalla nueva en la pestaña «Pantallas» (nombre y orientación):</p>
-  <pre class="cmd">adb -s 192.168.0.XX:5555 shell monkey -p com.tvplayer.signage -c android.intent.category.LAUNCHER 1</pre>
-  <p><b>6b. Para que la app abra sola al encender el TV</b> (y después de cada actualización de la app, que lo borra), déjala como pantalla de inicio. En los TV con «Depuración inalámbrica» (Android 11) primero se usa <code>adb pair</code> con el código que muestra el TV:</p>
-  <pre class="cmd">adb -s 192.168.0.XX:5555 shell cmd package set-home-activity com.tvplayer.signage/.MainActivity</pre>
+  <pre class="cmd">adb -s 192.168.0.XX:PUERTO shell am start -n com.tvplayer.signage/.MainActivity</pre>
+  <p><b>6b. Para que la app abra sola al encender el TV</b> (y después de cada actualización de la app, que lo borra), déjala como pantalla de inicio:</p>
+  <pre class="cmd">adb -s 192.168.0.XX:PUERTO shell cmd package set-home-activity com.tvplayer.signage/.MainActivity</pre>
+  <p><b>6c. Solo en Google TV: desactiva el protector de pantalla.</b> Si queda activo, a los pocos minutos el TV muestra su protector, Android deja la app detrás y la congela, y la pantalla sigue viéndose encendida pero <b>deja de aparecer en línea en el panel</b>:</p>
+  <pre class="cmd">adb -s 192.168.0.XX:PUERTO shell settings put secure screensaver_enabled 0
+adb -s 192.168.0.XX:PUERTO shell settings put secure screensaver_activate_on_sleep 0
+adb -s 192.168.0.XX:PUERTO shell settings put secure screensaver_activate_on_dock 0</pre>
+  <div class="hint"><b>No quites la cuenta de Google</b> de un Google TV: al reiniciar, el asistente de configuración vuelve a pedirla, no se puede saltar y la app no arranca. Si lo hiciste, vuelve a iniciar sesión con la misma cuenta.</div>
   <p><b>7. Opcional, actualizaciones sin confirmar en pantalla.</b> Solo funciona en algunos TV (por ejemplo Android 11). El TV no debe tener cuentas de Google (Ajustes → Cuentas). Si da error, no pasa nada: ese TV se actualizará igual, pero pidiendo confirmar con el control. En los TV Android 7.1 («RealtekATV») no funciona.</p>
-  <pre class="cmd">adb -s 192.168.0.XX:5555 shell dpm set-device-owner com.tvplayer.signage/.AdminReceiver</pre>
+  <pre class="cmd">adb -s 192.168.0.XX:PUERTO shell dpm set-device-owner com.tvplayer.signage/.AdminReceiver</pre>
   <p><b>8. Al terminar</b>, desconecta el TV:</p>
-  <pre class="cmd">adb disconnect 192.168.0.XX:5555</pre>
+  <pre class="cmd">adb disconnect 192.168.0.XX:PUERTO</pre>
   <div class="hint">Importante: todas las versiones de la app deben firmarse con la misma llave. Guarda una copia de <code>C:\\Users\\iscar\\.android\\debug.keystore</code>; si la pierdes, habría que desinstalar y reinstalar la app en cada TV.</div></div>`;
+  const trouble=`<div class="card" style="font-size:13px;line-height:1.65">
+  <p>Si el TV está <b>encendido y se ve la app</b> pero el panel lo muestra «Sin conexión»:</p>
+  <ol>
+    <li><b>Mira qué hay en primer plano</b> (con el TV conectado por ADB). Debe decir <code>com.tvplayer.signage</code>; si dice <code>DreamActivity</code> es el protector de pantalla de Google TV (ver paso 6c):
+    <pre class="cmd">adb -s 192.168.0.XX:PUERTO shell "dumpsys activity activities | grep -i topResumedActivity"</pre></li>
+    <li><b>Vuelve a abrir la app</b> (si ya estaba abierta, basta con salir y volver a entrar; con eso la app reinicia su sincronización):
+    <pre class="cmd">adb -s 192.168.0.XX:PUERTO shell am start -n com.tvplayer.signage/.MainActivity</pre></li>
+    <li><b>Comprueba que el TV llegue al servidor:</b>
+    <pre class="cmd">adb -s 192.168.0.XX:PUERTO shell ping -c 2 pantallas.lacole.edu.co</pre></li>
+    <li>Si al encender el TV queda en el menú de inicio y la app no se abre sola, déjala como pantalla de inicio (paso 6b) o ábrela a mano.</li>
+    <li>Un TV <b>apagado</b> aparece sin conexión; fuera del horario de funcionamiento se muestra «Fuera de horario».</li>
+  </ol></div>`;
   $('v-help').innerHTML=verCard()+`
   <h2>Agregar una pantalla nueva</h2>
   <div class="card" style="font-size:14px;line-height:1.6">
@@ -496,14 +546,20 @@ adb -s 192.168.0.XX:5555 install -r C:\\android\\app\\build\\outputs\\apk\\debug
   <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>Televisor</th><th>¿Funciona?</th><th>Notas</th></tr></thead><tbody>
     <tr><td>Android TV / Google TV (Android 7 o superior)</td><td><span class="badge ok">Sí</span></td><td>Es el caso de la mayoría de pantallas. Instalación con ADB (abajo).</td></tr>
     <tr><td>LG con webOS 6 o superior</td><td><span class="badge warn">Con límites</span></td><td>Solo videos hasta 720p. La app se abre a mano cada vez que se enciende el TV. Hay que extender cada cierto tiempo el modo desarrollador.</td></tr>
-    <tr><td>TV básico, sin tienda de apps ni Android (por ejemplo el Challenger con menú simple)</td><td><span class="badge bad">No</span></td><td>Se necesita un <b>TV box o stick Android</b> conectado por HDMI.</td></tr>
+    <tr><td>TV básico, sin tienda de apps ni Android ni Google TV (menú simple)</td><td><span class="badge bad">No</span></td><td>Se necesita un <b>TV box o stick Android</b> conectado por HDMI.</td></tr>
     <tr><td>Samsung (Tizen), Roku, Apple TV</td><td><span class="badge bad">No</span></td><td>No hay app para esos sistemas. Usar un TV box o stick Android por HDMI.</td></tr>
     <tr><td>LG con webOS anterior a la versión 6, o sin la app Developer Mode</td><td><span class="badge gray">Sin probar</span></td><td>Es probable que no se pueda instalar. Usar un dispositivo Android.</td></tr>
     <tr><td>Cualquier TV sin internet o con wifi muy débil</td><td><span class="badge warn">Limitado</span></td><td>La app guarda los videos en el TV y sigue reproduciendo, pero no recibe cambios ni aparece en línea.</td></tr>
   </tbody></table></div>
 
+  <h2>IP de cada pantalla</h2>
+  ${ipTable()}
+
   <h2>Instalar en Android TV</h2>
   ${android}
+
+  <h2>Una pantalla está encendida pero no aparece en línea</h2>
+  ${trouble}
 
   <h2>Instalar en LG (webOS)</h2>
   <div class="card" style="font-size:13px;line-height:1.65">
@@ -521,6 +577,7 @@ ares-launch --device tv co.edu.lacole.pantallas</pre>
     </ol>
     <div class="hint">La sesión del modo desarrollador dura unas 999 horas. Antes de que venza, abre la app Developer Mode del TV y pulsa <b>Extend</b>; si se vence, el TV desinstala la app y hay que repetir los pasos.</div>
   </div>`;
+  cmdCopy($('v-help'));
 }
 function uploadApp(file){
   if(!file)return;const p=$('appprog'),e=$('apperr');e.textContent='';p.style.display='block';$('apkbtn').disabled=true;APPUP=true;
@@ -559,11 +616,12 @@ async function move(id,dir){await api('POST','/api/admin/contents/'+id+'/move',{
 function delContent(id){const c=S.contents.find(x=>x.id===id);confirmBox('Eliminar contenido','«'+esc(c.title)+'» se borrará también de todas las pantallas donde se muestra.','Eliminar',async()=>{await api('DELETE','/api/admin/contents/'+id);load()})}
 
 const ORI_SHORT={0:'horizontal',90:'vertical 90°',270:'vertical 270°',180:'horizontal invertida'};
-let PICKED=null,FBMODE=false;
+let PICKED=null,PICKEDS=[],FBMODE=false;
+const isImg=f=>/\.(jpe?g|png|webp|gif)$/i.test(f.name);
 function contentModal(id,file,mode,presetScreen){
-  const c=id?S.contents.find(x=>x.id===id):null;PICKED=file||null;
+  const c=id?S.contents.find(x=>x.id===id):null;PICKEDS=file?(file.name===undefined?Array.from(file):[file]):[];PICKED=PICKEDS[0]||null;
   FBMODE=c?c.fallback:(mode==='fb');
-  const type=c?c.type:(file?(/\.(jpe?g|png|webp|gif)$/i.test(file.name)?'image':'video'):'video');
+  const type=c?c.type:(PICKED?(isImg(PICKED)?'image':'video'):'video');
   const appr=S.screens.filter(s=>s.status==='approved');
   let tgmode=presetScreen?'sel':((!c||!c.targets)?(S.is_super?'all':'sel'):'sel');
   SEL={g:new Set(),s:new Set(),o:new Set()};EXP=new Set();
@@ -575,9 +633,9 @@ function contentModal(id,file,mode,presetScreen){
   openModal(`<h3>${FBMODE?(c?'Editar contenido de respaldo':'Subir contenido de respaldo'):(c?'Editar contenido':'Agregar contenido')}</h3>
   ${FBMODE?'<div class="note" style="margin-bottom:6px">Se muestra solo cuando la pantalla no tiene nada programado.</div>':''}
   <label>Tipo</label><select id="f-type" ${c?'disabled':''} onchange="typeChanged()"><option value="video">Video</option><option value="image">Imagen</option>${FBMODE?'':'<option value="web">Página web</option>'}</select>
-  <div id="f-filebox"><label>Archivo</label>${c?`<div class="hint">${esc(c.orig_name||'')}. Para cambiar el archivo, elimina este contenido y crea uno nuevo.</div>`:`<input type="file" id="f-file" onchange="filePicked(this.files[0])"><div class="hint">Máximo ${S.max_upload_mb} MB. Videos: MP4 (H.264) a <b>720p (1280×720)</b>, los de 1080p no se reproducirán en todas las pantallas. Imágenes: JPG/PNG. Verticales: 1080×1920.</div><div id="f-vwarn"></div><div class="hint" style="display:none"></div>`}</div>
+  <div id="f-filebox"><label>Archivo</label>${c?`<div class="hint">${esc(c.orig_name||'')}. Para cambiar el archivo, elimina este contenido y crea uno nuevo.</div>`:`<input type="file" id="f-file" multiple onchange="filePicked(this.files)"><div id="f-list" class="hint" style="display:none"></div><div class="hint">Puedes elegir <b>varios archivos a la vez</b> (varias imágenes o varios videos, con Ctrl o Mayús). Máximo ${S.max_upload_mb} MB por archivo. Videos: MP4 (H.264) a <b>720p (1280×720)</b>, los de 1080p no se reproducirán en todas las pantallas. Imágenes: JPG/PNG. Verticales: 1080×1920.</div><div id="f-vwarn"></div><div class="hint" style="display:none"></div>`}</div>
   <div id="f-urlbox"><label>Dirección web</label><input type="url" id="f-url" value="${esc(c&&c.url||'')}" placeholder="https://www.lacole.edu.co/..."><label class="chk"><input type="checkbox" id="f-inter" ${c&&c.interactive?'checked':''}> Interactiva (el control remoto actúa sobre la página)</label></div>
-  <label>Título</label><input type="text" id="f-title" value="${esc(c?c.title:(file?file.name.replace(/\.[^.]+$/,''):''))}">
+  <div id="f-titlebox"><label>Título</label><input type="text" id="f-title" value="${esc(c?c.title:(PICKEDS.length===1?PICKED.name.replace(/\.[^.]+$/,''):''))}"></div>
   <div id="f-durbox"><label>Segundos en pantalla</label><input type="number" id="f-dur" min="3" max="3600" value="${c&&c.duration||(type==='web'?30:10)}"></div>
   <div id="f-schedbox" ${FBMODE?'style="display:none"':''}><label>Publicación</label>
   <label class="chk"><input type="radio" name="sch" value="always" ${range?'':'checked'} onchange="schChanged()"> Indefinida: se muestra siempre, hasta que lo elimines</label>
@@ -590,12 +648,12 @@ function contentModal(id,file,mode,presetScreen){
   <div id="f-tree" class="tree"></div>
   <div class="prog" id="prog"><i></i></div><div class="err" id="err"></div>
   <div class="row" style="margin-top:18px"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" id="savebtn" onclick="saveContent(${c?`'${c.id}'`:'null'})">${c?'Guardar':(FBMODE?'Subir':'Subir y publicar')}</button></div>`);
-  $('f-type').value=type;typeChanged();schChanged();paintTree();tgChanged();if(PICKED)checkVideo(PICKED);
+  $('f-type').value=type;typeChanged();schChanged();paintTree();tgChanged();listPicked();checkVideos();
 }
 function typeChanged(){
   const t=$('f-type').value,edit=$('f-type').disabled;
   $('f-filebox').style.display=t==='web'?'none':'';$('f-urlbox').style.display=t==='web'?'':'none';
-  $('f-durbox').style.display=t==='video'?'none':'';
+  $('f-durbox').style.display=(t==='video'&&!PICKEDS.some(isImg))?'none':'';
   if(!edit&&$('f-file')){$('f-file').accept=t==='image'?'image/*':'video/*'}
 }
 function schChanged(){
@@ -630,15 +688,25 @@ function tgToggle(g){EXP.has(g)?EXP.delete(g):EXP.add(g);paintTree()}
 function tgGroup(g,on){if(on){SEL.g.add(g);S.screens.forEach(sc=>{if((sc.groups||[]).includes(g))SEL.s.delete(sc.id)});EXP.add(g)}else SEL.g.delete(g);paintTree()}
 function tgScreen(id,on){on?SEL.s.add(id):SEL.s.delete(id);paintTree()}
 function tgOri(o){SEL.o.delete(o);paintTree()}
-function checkVideo(f){
-  const w=$('f-vwarn');if(!w)return;w.innerHTML='';
-  if(!f||!/\.(mp4|m4v|mov|webm|mkv)$/i.test(f.name))return;
+function checkVideo(f,many){
+  const w=$('f-vwarn');if(!w||!f||!/\.(mp4|m4v|mov|webm|mkv)$/i.test(f.name))return;
   const v=document.createElement('video'),u=URL.createObjectURL(f);v.preload='metadata';
   v.onloadedmetadata=()=>{URL.revokeObjectURL(u);const W=v.videoWidth,H=v.videoHeight,long=Math.max(W,H),short=Math.min(W,H);
-    if(long>1280||short>720)w.innerHTML=`<div class="warn"><b>Este video es de ${W}×${H}.</b> Los videos deben estar a 720p (1280×720). Los videos a 1080p no se reproducirán en todas las pantallas y se verán en negro. Expórtalo a 720p antes de subirlo.</div>`;};
+    if(long>1280||short>720)w.insertAdjacentHTML('beforeend',`<div class="warn"><b>${many?esc(f.name)+': ':''}Este video es de ${W}×${H}.</b> Los videos deben estar a 720p (1280×720). Los videos a 1080p no se reproducirán en todas las pantallas y se verán en negro. Expórtalo a 720p antes de subirlo.</div>`)};
   v.onerror=()=>URL.revokeObjectURL(u);v.src=u;
 }
-function filePicked(f){PICKED=f;checkVideo(f);if(f&&!$('f-title').value)$('f-title').value=f.name.replace(/\.[^.]+$/,'');if(f)$('f-type').value=/\.(jpe?g|png|webp|gif)$/i.test(f.name)?'image':'video';typeChanged()}
+function checkVideos(){const w=$('f-vwarn');if(!w)return;w.innerHTML='';PICKEDS.forEach(f=>checkVideo(f,PICKEDS.length>1))}
+function listPicked(){
+  const l=$('f-list'),tb=$('f-titlebox');if(!l||!tb)return;const n=PICKEDS.length;
+  l.style.display=n>1?'':'none';tb.style.display=n>1?'none':'';
+  l.innerHTML=n>1?`<b>${n} archivos seleccionados.</b> Cada uno se publica como un contenido aparte, con su nombre de archivo como título (se puede cambiar después con «Editar»), y con las mismas pantallas, fechas y duración.<ul style="margin:6px 0 0;padding-left:18px">${PICKEDS.map(f=>`<li>${esc(f.name)} <span class="badge gray">${isImg(f)?'imagen':'video'}</span></li>`).join('')}</ul>`:'';
+}
+function filePicked(fl){
+  PICKEDS=Array.from(fl||[]);PICKED=PICKEDS[0]||null;
+  if(PICKEDS.length===1&&!$('f-title').value)$('f-title').value=PICKED.name.replace(/\.[^.]+$/,'');
+  if(PICKED)$('f-type').value=isImg(PICKED)?'image':'video';
+  listPicked();checkVideos();typeChanged();
+}
 function upload(file,onp){return new Promise((res,rej)=>{
   const x=new XMLHttpRequest();x.open('POST','/api/admin/upload?name='+encodeURIComponent(file.name));x.setRequestHeader('X-Requested-With','panel');
   x.upload.onprogress=e=>onp(e.loaded/e.total);x.onload=()=>{let j={};try{j=JSON.parse(x.responseText)}catch(e){}x.status===200?res(j):rej(new Error(j.error||'Error al subir ('+x.status+')'))};
@@ -653,20 +721,32 @@ async function saveContent(id){
   if(tgm!=='all')body.targets=[...[...SEL.g].map(g=>'grp:'+g),...SEL.s,...SEL.o];
   if(body.targets&&!body.targets.length){$('err').textContent='Elige al menos un grupo o una pantalla';return}
   btn.disabled=true;
+  let ok=0,total=PICKEDS.length;
   try{
     if(id){await api('PATCH','/api/admin/contents/'+id,body)}
+    else if(type==='web'){await api('POST','/api/admin/contents',body)}
     else{
-      if(type!=='web'){
-        if(!PICKED)throw new Error('Elige un archivo');
-        const p=$('prog');p.style.display='block';
-        const u=await upload(PICKED,f=>p.firstElementChild.style.width=(f*100)+'%');
-        body.file=u.file;body.orig_name=u.orig_name;
+      if(!PICKEDS.length)throw new Error('Elige un archivo');
+      const p=$('prog');p.style.display='block';
+      while(PICKEDS.length){
+        const f=PICKEDS[0],kind=isImg(f)?'image':'video';
+        if(total>1)btn.textContent='Subiendo '+(ok+1)+' de '+total+'…';
+        p.firstElementChild.style.width='0%';
+        let u;try{u=await upload(f,x=>p.firstElementChild.style.width=(x*100)+'%')}catch(e){e.fileName=f.name;throw e}
+        const b=Object.assign({},body,{type:kind,file:u.file,orig_name:u.orig_name});
+        if(total>1)b.title=f.name.replace(/\.[^.]+$/,'');
+        let made;try{made=await api('POST','/api/admin/contents',b)}catch(e){e.fileName=f.name;throw e}
+        try{const tb=await makeThumb(f,kind);if(tb)await postThumb(made.id,tb)}catch(e){}
+        PICKEDS.shift();ok++;
       }
-      const made=await api('POST','/api/admin/contents',body);
-      if(type!=='web'&&PICKED){try{const tb=await makeThumb(PICKED,type);if(tb)await postThumb(made.id,tb)}catch(e){}}
+      PICKED=null;
     }
-    closeModal();toast('Guardado');load();
-  }catch(e){$('err').textContent=e.message;btn.disabled=false}
+    closeModal();toast(ok>1?ok+' contenidos publicados':'Guardado');load();
+  }catch(e){
+    $('err').textContent=(total>1?(ok?'Se publicaron '+ok+' de '+total+'. ':'')+(e.fileName?'Falló «'+e.fileName+'»: ':'')+e.message+(PICKEDS.length?' Puedes reintentar: quedan los archivos que faltan.':''):e.message);
+    btn.disabled=false;btn.textContent=FBMODE?'Subir':'Subir y publicar';
+    if(ok){PICKED=PICKEDS[0]||null;listPicked();load()}
+  }
 }
 
 /* ---------------- Grupos (solo comunicaciones) ---------------- */
