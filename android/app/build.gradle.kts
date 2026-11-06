@@ -11,8 +11,8 @@ android {
         applicationId = "com.tvplayer.signage"
         minSdk = 21
         targetSdk = 33
-        versionCode = 7
-        versionName = "2.5"
+        versionCode = 8
+        versionName = "2.6"
     }
 
     buildTypes {

@@ -39,9 +39,14 @@ class SyncManager(private val ctx: Context, private val listener: Listener) {
     private var beatThread: Thread? = null
     private var lastKey: String? = null
 
+    /** Ultima vez que el servidor respondio un aviso (o arranque del gestor). Sirve de vigilante. */
+    @Volatile private var lastOk = System.currentTimeMillis()
+    fun stalledMs(): Long = System.currentTimeMillis() - lastOk
+
     fun start() {
         if (running) return
         running = true
+        lastOk = System.currentTimeMillis()
         Clock.offset = Prefs.clockOffset(ctx)
         cleanupLegacy()
         loadCached()
@@ -199,6 +204,7 @@ class SyncManager(private val ctx: Context, private val listener: Listener) {
             c.outputStream.use { it.write(j.toString().toByteArray(Charsets.UTF_8)) }
             if (c.responseCode != 200) throw IOException("HTTP " + c.responseCode)
             val r = JSONObject(c.inputStream.bufferedReader().use { it.readText() })
+            lastOk = System.currentTimeMillis()
             if (r.has("server_time")) updateClock(r.getLong("server_time"))
             val cmd = r.optString("cmd", "")
             if (cmd.isNotEmpty() && cmd != "null") main.post { listener.onCommand(cmd) }

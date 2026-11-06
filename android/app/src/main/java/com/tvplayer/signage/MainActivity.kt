@@ -274,6 +274,16 @@ class MainActivity : Activity(), SyncManager.Listener {
 
     private fun onTick() {
         tickCount++
+        // Vigilante: si en 90 s el servidor no respondio ningun aviso, los hilos de sincronizacion
+        // pudieron quedar trabados (pasa al encender el TV): se reinician como al salir y volver a entrar.
+        sync?.let { cur ->
+            if (cur.stalledMs() > 90000) {
+                cur.stop()
+                val ns = SyncManager(applicationContext, this)
+                sync = ns
+                ns.start()
+            }
+        }
         if (blackout != null) {
             if (Clock.now() >= blackoutUntil) endBlackout()
             return

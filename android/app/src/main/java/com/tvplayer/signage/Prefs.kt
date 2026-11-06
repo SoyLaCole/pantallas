@@ -6,7 +6,7 @@ import java.util.UUID
 /** Datos que la app recuerda en el TV. */
 object Prefs {
     const val DEFAULT_SERVER = "https://pantallas.lacole.edu.co"
-    const val APP_VERSION = "2.5"
+    const val APP_VERSION = "2.6"
 
     private fun sp(c: Context) = c.getSharedPreferences("tvplayer", Context.MODE_PRIVATE)
 
