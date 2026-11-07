@@ -141,7 +141,7 @@ details.gcard>summary{list-style:none}details.gcard>summary::-webkit-details-mar
 <nav>
   <button id="t-screens" class="on" onclick="tab('screens')">Pantallas</button>
   <button id="t-contents" onclick="tab('contents')">Contenido</button>
-  <button id="t-fallback" onclick="tab('fallback')">Respaldo</button>
+  <button id="t-fallback" onclick="tab('fallback')">Respaldo y banco</button>
   <button id="t-groups" onclick="tab('groups')" style="display:none">Grupos</button>
   <button id="t-app" onclick="tab('app')">Aplicación</button>
   <button id="t-admins" onclick="tab('admins')" style="display:none">Administradores</button>
@@ -162,7 +162,7 @@ details.gcard>summary{list-style:none}details.gcard>summary::-webkit-details-mar
 
 <script>
 let S={screens:[],contents:[],now:0};
-const PAGE_VERSION='2.5.0';
+const PAGE_VERSION='2.6.0';
 let TAB='screens';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -367,12 +367,12 @@ function wireDnD(g){
 }
 function renderFallback(){
   const list=S.contents.filter(c=>c.fallback);
-  let h=`<div class="note"><b>¿Qué es el contenido de respaldo?</b><br>Es lo que una pantalla muestra cuando no tiene nada programado para ese momento, para que nunca se quede en negro. Puedes subir uno para todas las pantallas o uno distinto para algunas.</div>
-  <div class="row" style="margin-bottom:14px"><button class="btn pri" onclick="contentModal(null,null,'fb')">+ Subir contenido de respaldo</button></div>`;
+  let h=`<div class="note"><b>Respaldo y banco de contenidos</b><br>Aquí quedan guardados contenidos que no están programados. Mientras estén aquí, sirven de <b>respaldo</b>: una pantalla los muestra cuando no tiene nada programado para ese momento, para que nunca se quede en negro. Y funcionan como un <b>banco</b>: con <b>Publicar</b> sacas una copia a la programación (eligiendo pantallas y fechas) sin volver a subir el archivo, y el original sigue guardado. Para pasar un contenido programado a este banco, edítalo y elige «Respaldo / banco».</div>
+  <div class="row" style="margin-bottom:14px"><button class="btn pri" onclick="contentModal(null,null,'fb')">+ Subir al banco de respaldo</button></div>`;
   if(!list.length)h+='<div class="card empty">Aún no hay contenido de respaldo.</div>';
   else h+='<div class="fbgrid">'+list.map(c=>`<div class="card fbcard">${thumbHtml(c)}<div style="flex:1;min-width:0">
     <h3>${esc(c.title)}</h3><div class="s" style="font-size:12px;color:var(--mut);margin-bottom:10px"><span class="badge">${TYPES[c.type]}</span> ${esc(targetText(c))}${c.size?' · '+(c.size/1048576).toFixed(1)+' MB':''}</div>
-    ${c.editable?`<div class="row"><button class="btn sm" onclick="contentModal('${c.id}')">Editar</button><button class="btn sm bad" onclick="delContent('${c.id}')">Eliminar</button></div>`:'<div class="hint" style="margin:0">Solo lectura</div>'}</div></div>`).join('')+'</div>';
+    ${c.editable?`<div class="row"><button class="btn sm pri" onclick="contentModal(null,null,null,null,'${c.id}')" title="Publica una copia en la programación; el original sigue en el banco">Publicar</button><button class="btn sm" onclick="contentModal('${c.id}')">Editar</button><button class="btn sm bad" onclick="delContent('${c.id}')">Eliminar</button></div>`:'<div class="hint" style="margin:0">Solo lectura</div>'}</div></div>`).join('')+'</div>';
   $('v-fallback').innerHTML=h;
 }
 /* ---------------- Aplicación (actualización de los TV) ---------------- */
@@ -616,27 +616,33 @@ async function move(id,dir){await api('POST','/api/admin/contents/'+id+'/move',{
 function delContent(id){const c=S.contents.find(x=>x.id===id);confirmBox('Eliminar contenido','«'+esc(c.title)+'» se borrará también de todas las pantallas donde se muestra.','Eliminar',async()=>{await api('DELETE','/api/admin/contents/'+id);load()})}
 
 const ORI_SHORT={0:'horizontal',90:'vertical 90°',270:'vertical 270°',180:'horizontal invertida'};
-let PICKED=null,PICKEDS=[],FBMODE=false;
+let PICKED=null,PICKEDS=[],FBMODE=false,COPYSRC=null,EDITING=false;
 const isImg=f=>/\.(jpe?g|png|webp|gif)$/i.test(f.name);
-function contentModal(id,file,mode,presetScreen){
-  const c=id?S.contents.find(x=>x.id===id):null;PICKEDS=file?(file.name===undefined?Array.from(file):[file]):[];PICKED=PICKEDS[0]||null;
-  FBMODE=c?c.fallback:(mode==='fb');
-  const type=c?c.type:(PICKED?(isImg(PICKED)?'image':'video'):'video');
+function useIsFb(){const r=document.querySelector('input[name=use]:checked');return !!r&&r.value==='fb'}
+function saveLabel(){return COPYSRC?'Publicar copia':(EDITING?'Guardar':(useIsFb()?'Subir':'Subir y publicar'))}
+function useChanged(){const fb=useIsFb();const sb=$('f-schedbox');if(sb)sb.style.display=fb?'none':'';const b=$('savebtn');if(b)b.textContent=saveLabel()}
+function contentModal(id,file,mode,presetScreen,copyId){
+  const c=id?S.contents.find(x=>x.id===id):null;COPYSRC=copyId?S.contents.find(x=>x.id===copyId):null;EDITING=!!c;const base=c||COPYSRC;PICKEDS=file?(file.name===undefined?Array.from(file):[file]):[];PICKED=PICKEDS[0]||null;
+  FBMODE=c?c.fallback:(!COPYSRC&&mode==='fb');
+  const type=c?c.type:(COPYSRC?COPYSRC.type:(PICKED?(isImg(PICKED)?'image':'video'):'video'));
   const appr=S.screens.filter(s=>s.status==='approved');
-  let tgmode=presetScreen?'sel':((!c||!c.targets)?(S.is_super?'all':'sel'):'sel');
+  let tgmode=presetScreen?'sel':((!base||!base.targets)?(S.is_super?'all':'sel'):'sel');
   SEL={g:new Set(),s:new Set(),o:new Set()};EXP=new Set();
-  if(c&&c.targets)c.targets.forEach(t=>{if(t.startsWith('grp:'))SEL.g.add(t.slice(4));else if(t.startsWith('ori:'))SEL.o.add(t);else SEL.s.add(t)});
+  if(base&&base.targets)base.targets.forEach(t=>{if(t.startsWith('grp:'))SEL.g.add(t.slice(4));else if(t.startsWith('ori:'))SEL.o.add(t);else SEL.s.add(t)});
   if(presetScreen)SEL.s.add(presetScreen);
   appr.forEach(sc=>{if(SEL.s.has(sc.id))(sc.groups||[]).forEach(g=>EXP.add(g))});SEL.g.forEach(g=>EXP.add(g));
   if(!SEL.s.size&&!SEL.g.size&&(S.groups||[]).length===1)EXP.add(S.groups[0].id);
   const range=!!(c&&(c.start_at||c.end_at));
-  openModal(`<h3>${FBMODE?(c?'Editar contenido de respaldo':'Subir contenido de respaldo'):(c?'Editar contenido':'Agregar contenido')}</h3>
-  ${FBMODE?'<div class="note" style="margin-bottom:6px">Se muestra solo cuando la pantalla no tiene nada programado.</div>':''}
-  <label>Tipo</label><select id="f-type" ${c?'disabled':''} onchange="typeChanged()"><option value="video">Video</option><option value="image">Imagen</option>${FBMODE?'':'<option value="web">Página web</option>'}</select>
-  <div id="f-filebox"><label>Archivo</label>${c?`<div class="hint">${esc(c.orig_name||'')}. Para cambiar el archivo, elimina este contenido y crea uno nuevo.</div>`:`<input type="file" id="f-file" multiple onchange="filePicked(this.files)"><div id="f-list" class="hint" style="display:none"></div><div class="hint">Puedes elegir <b>varios archivos a la vez</b> (varias imágenes o varios videos, con Ctrl o Mayús). Máximo ${S.max_upload_mb} MB por archivo. Videos: MP4 (H.264) a <b>720p (1280×720)</b>, los de 1080p no se reproducirán en todas las pantallas. Imágenes: JPG/PNG. Verticales: 1080×1920.</div><div id="f-vwarn"></div><div class="hint" style="display:none"></div>`}</div>
-  <div id="f-urlbox"><label>Dirección web</label><input type="url" id="f-url" value="${esc(c&&c.url||'')}" placeholder="https://www.lacole.edu.co/..."><label class="chk"><input type="checkbox" id="f-inter" ${c&&c.interactive?'checked':''}> Interactiva (el control remoto actúa sobre la página)</label></div>
-  <div id="f-titlebox"><label>Título</label><input type="text" id="f-title" value="${esc(c?c.title:(PICKEDS.length===1?PICKED.name.replace(/\.[^.]+$/,''):''))}"></div>
-  <div id="f-durbox"><label>Segundos en pantalla</label><input type="number" id="f-dur" min="3" max="3600" value="${c&&c.duration||(type==='web'?30:10)}"></div>
+  openModal(`<h3>${COPYSRC?'Publicar desde el banco':(c?'Editar contenido':'Agregar contenido')}</h3>
+  ${COPYSRC?`<div class="note" style="margin-bottom:6px">Se publica una <b>copia</b> de «${esc(COPYSRC.title)}» con las pantallas y fechas que elijas. El original sigue guardado en el banco de respaldo.</div>`:`<label>Cómo se usa</label>
+  <label class="chk"><input type="radio" name="use" value="prog" ${FBMODE?'':'checked'} onchange="useChanged()"> Programado: se publica con sus pantallas y fechas</label>
+  <label class="chk"><input type="radio" name="use" value="fb" ${FBMODE?'checked':''} onchange="useChanged()"> Respaldo / banco: queda guardado para publicarlo de nuevo cuando quieras y, mientras tanto, se muestra solo cuando la pantalla no tiene nada programado</label>
+  <div id="f-fbnote" class="hint" style="display:none">Las páginas web no pueden ser de respaldo ni de banco.</div>`}
+  <label>Tipo</label><select id="f-type" ${(c||COPYSRC)?'disabled':''} onchange="typeChanged()"><option value="video">Video</option><option value="image">Imagen</option><option value="web">Página web</option></select>
+  <div id="f-filebox"><label>Archivo</label>${COPYSRC?`<div class="hint">${esc(COPYSRC.orig_name||'')}. Se reutiliza el mismo archivo, sin volver a subirlo.</div>`:c?`<div class="hint">${esc(c.orig_name||'')}. Para cambiar el archivo, elimina este contenido y crea uno nuevo.</div>`:`<input type="file" id="f-file" multiple onchange="filePicked(this.files)"><div id="f-list" class="hint" style="display:none"></div><div class="hint">Puedes elegir <b>varios archivos a la vez</b> (varias imágenes o varios videos, con Ctrl o Mayús). Máximo ${S.max_upload_mb} MB por archivo. Videos: MP4 (H.264) a <b>720p (1280×720)</b>, los de 1080p no se reproducirán en todas las pantallas. Imágenes: JPG/PNG. Verticales: 1080×1920.</div><div id="f-vwarn"></div><div class="hint" style="display:none"></div>`}</div>
+  <div id="f-urlbox"><label>Dirección web</label><input type="url" id="f-url" value="${esc(base&&base.url||'')}" placeholder="https://www.lacole.edu.co/..."><label class="chk"><input type="checkbox" id="f-inter" ${base&&base.interactive?'checked':''}> Interactiva (el control remoto actúa sobre la página)</label></div>
+  <div id="f-titlebox"><label>Título</label><input type="text" id="f-title" value="${esc(base?base.title:(PICKEDS.length===1?PICKED.name.replace(/\.[^.]+$/,''):''))}"></div>
+  <div id="f-durbox"><label>Segundos en pantalla</label><input type="number" id="f-dur" min="3" max="3600" value="${base&&base.duration||(type==='web'?30:10)}"></div>
   <div id="f-schedbox" ${FBMODE?'style="display:none"':''}><label>Publicación</label>
   <label class="chk"><input type="radio" name="sch" value="always" ${range?'':'checked'} onchange="schChanged()"> Indefinida: se muestra siempre, hasta que lo elimines</label>
   <label class="chk"><input type="radio" name="sch" value="range" ${range?'checked':''} onchange="schChanged()"> Programar fechas</label>
@@ -647,13 +653,16 @@ function contentModal(id,file,mode,presetScreen){
   <label class="chk"><input type="radio" name="tg" value="sel" ${tgmode==='sel'?'checked':''} onchange="tgChanged()"> Elegir grupos o pantallas</label>`:`<input type="radio" name="tg" value="sel" checked style="display:none">`}
   <div id="f-tree" class="tree"></div>
   <div class="prog" id="prog"><i></i></div><div class="err" id="err"></div>
-  <div class="row" style="margin-top:18px"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" id="savebtn" onclick="saveContent(${c?`'${c.id}'`:'null'})">${c?'Guardar':(FBMODE?'Subir':'Subir y publicar')}</button></div>`);
-  $('f-type').value=type;typeChanged();schChanged();paintTree();tgChanged();listPicked();checkVideos();
+  <div class="row" style="margin-top:18px"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" id="savebtn" onclick="saveContent(${c?`'${c.id}'`:'null'})">${saveLabel()}</button></div>`);
+  $('f-type').value=type;typeChanged();useChanged();schChanged();paintTree();tgChanged();listPicked();checkVideos();
 }
 function typeChanged(){
   const t=$('f-type').value,edit=$('f-type').disabled;
   $('f-filebox').style.display=t==='web'?'none':'';$('f-urlbox').style.display=t==='web'?'':'none';
   $('f-durbox').style.display=(t==='video'&&!PICKEDS.some(isImg))?'none':'';
+  const fbr=document.querySelector('input[name=use][value=fb]');
+  const fn=$('f-fbnote');if(fn)fn.style.display=(t==='web')?'':'none';
+  if(fbr){fbr.disabled=(t==='web');if(t==='web'){const pr=document.querySelector('input[name=use][value=prog]');if(pr)pr.checked=true;useChanged()}}
   if(!edit&&$('f-file')){$('f-file').accept=t==='image'?'image/*':'video/*'}
 }
 function schChanged(){
@@ -713,7 +722,7 @@ function upload(file,onp){return new Promise((res,rej)=>{
   x.onerror=()=>rej(new Error('Falló la conexión'));x.send(file)})}
 async function saveContent(id){
   const btn=$('savebtn');$('err').textContent='';
-  const type=$('f-type').value,fb=FBMODE,always=fb||document.querySelector('input[name=sch]:checked').value==='always';
+  const type=$('f-type').value,fb=!COPYSRC&&useIsFb(),always=fb||document.querySelector('input[name=sch]:checked').value==='always';
   const body={type,title:$('f-title').value,fallback:fb,duration:+$('f-dur').value||null,interactive:$('f-inter')&&$('f-inter').checked,
     url:$('f-url').value,start_at:always?null:fromLocalInput($('f-start').value),end_at:always?null:fromLocalInput($('f-end').value),
     targets:null};
@@ -724,6 +733,7 @@ async function saveContent(id){
   let ok=0,total=PICKEDS.length;
   try{
     if(id){await api('PATCH','/api/admin/contents/'+id,body)}
+    else if(COPYSRC){body.copy_of=COPYSRC.id;await api('POST','/api/admin/contents',body)}
     else if(type==='web'){await api('POST','/api/admin/contents',body)}
     else{
       if(!PICKEDS.length)throw new Error('Elige un archivo');
@@ -741,10 +751,10 @@ async function saveContent(id){
       }
       PICKED=null;
     }
-    closeModal();toast(ok>1?ok+' contenidos publicados':'Guardado');load();
+    closeModal();toast(ok>1?ok+' contenidos publicados':(COPYSRC?'Copia publicada':(fb?'Guardado en el banco':'Guardado')));load();
   }catch(e){
     $('err').textContent=(total>1?(ok?'Se publicaron '+ok+' de '+total+'. ':'')+(e.fileName?'Falló «'+e.fileName+'»: ':'')+e.message+(PICKEDS.length?' Puedes reintentar: quedan los archivos que faltan.':''):e.message);
-    btn.disabled=false;btn.textContent=FBMODE?'Subir':'Subir y publicar';
+    btn.disabled=false;btn.textContent=saveLabel();
     if(ok){PICKED=PICKEDS[0]||null;listPicked();load()}
   }
 }

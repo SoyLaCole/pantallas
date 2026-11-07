@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import shutil
 import re
 import secrets
 import sqlite3
@@ -24,7 +25,7 @@ DB_PATH = os.path.join(DATA_DIR, "pantallas.db")
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
 CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-PANEL_VERSION = "2.5.0"          # subir este número en cada cambio del panel
+PANEL_VERSION = "2.6.0"          # subir este número en cada cambio del panel
 PANEL_BUILD = "2026-10-28"
 START_TS = time.time()           # momento en que arrancó esta versión del servidor (≈ hora del despliegue)
 SUPER_ADMIN = os.environ.get("SUPER_ADMIN", "comunicaciones@lacole.edu.co").strip().lower()
@@ -641,6 +642,13 @@ def parse_content(body, existing=None):
 @admin_required
 def content_create():
     body = request.get_json(force=True, silent=True) or {}
+    src = None
+    if body.get("copy_of"):   # publicar una copia de un contenido del banco, sin volver a subir el archivo
+        src = need_editable(str(body["copy_of"]))
+        body["type"] = src["type"]
+        if src["file"]:
+            body["file"] = src["file"]
+            body["orig_name"] = src["orig_name"]
     f, err = parse_content(body)
     if err:
         return jsonify(error=err), 400
@@ -668,7 +676,12 @@ def content_create():
          f["start_at"], f["end_at"], f["fallback"], f["interactive"], f["targets"], sort, time.time(),
          session["email"]))
     db().commit()
-    audit(f"contenido creado: {f['title']}")
+    if src is not None:
+        try:
+            shutil.copyfile(thumb_path(src["id"]), thumb_path(cid))
+        except OSError:
+            pass
+    audit(f"contenido creado: {f['title']}" + (f" (copia de {src['title']})" if src is not None else ""))
     return jsonify(id=cid)
 
 
@@ -1052,7 +1065,8 @@ def content_delete(cid):
         os.remove(thumb_path(cid))
     except OSError:
         pass
-    if r["file"]:
+    # el archivo se borra solo si ningun otro contenido (por ejemplo una copia publicada del banco) lo usa
+    if r["file"] and not db().execute("SELECT 1 FROM contents WHERE file=? LIMIT 1", (r["file"],)).fetchone():
         try:
             os.remove(os.path.join(MEDIA_DIR, os.path.basename(r["file"])))
         except OSError:
