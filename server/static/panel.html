@@ -162,7 +162,7 @@ details.gcard>summary{list-style:none}details.gcard>summary::-webkit-details-mar
 
 <script>
 let S={screens:[],contents:[],now:0};
-const PAGE_VERSION='2.6.0';
+const PAGE_VERSION='2.6.1';
 let TAB='screens';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -313,7 +313,7 @@ const OGRP={0:'Horizontales',90:'Verticales 90°',270:'Verticales 270°',180:'Ho
 function targetText(c){
   if(!c.targets)return 'Todas las pantallas';
   const parts=c.targets.map(id=>id.startsWith('ori:')?'Todas las '+OGRP[+id.slice(4)].toLowerCase():id.startsWith('grp:')?gName(id.slice(4)):(S.screens.find(s=>s.id===id)||{}).name).filter(Boolean);
-  return parts.length?parts.join(', '):'Ninguna pantalla'}
+  return parts.length?parts.join(', '):(c.fallback?'Solo guardado en el banco (sin pantallas)':'Ninguna pantalla')}
 function targetShort(c){
   if(!c.targets)return 'Todas';
   const n=matchScreens(c);
@@ -620,7 +620,7 @@ let PICKED=null,PICKEDS=[],FBMODE=false,COPYSRC=null,EDITING=false;
 const isImg=f=>/\.(jpe?g|png|webp|gif)$/i.test(f.name);
 function useIsFb(){const r=document.querySelector('input[name=use]:checked');return !!r&&r.value==='fb'}
 function saveLabel(){return COPYSRC?'Publicar copia':(EDITING?'Guardar':(useIsFb()?'Subir':'Subir y publicar'))}
-function useChanged(){const fb=useIsFb();const sb=$('f-schedbox');if(sb)sb.style.display=fb?'none':'';const b=$('savebtn');if(b)b.textContent=saveLabel()}
+function useChanged(){const fb=useIsFb();const th=$('f-tghint');if(th)th.style.display=(fb&&S.is_super)?'':'none';if($('f-tree'))paintTree();const sb=$('f-schedbox');if(sb)sb.style.display=fb?'none':'';const b=$('savebtn');if(b)b.textContent=saveLabel()}
 function contentModal(id,file,mode,presetScreen,copyId){
   const c=id?S.contents.find(x=>x.id===id):null;COPYSRC=copyId?S.contents.find(x=>x.id===copyId):null;EDITING=!!c;const base=c||COPYSRC;PICKEDS=file?(file.name===undefined?Array.from(file):[file]):[];PICKED=PICKEDS[0]||null;
   FBMODE=c?c.fallback:(!COPYSRC&&mode==='fb');
@@ -649,6 +649,7 @@ function contentModal(id,file,mode,presetScreen,copyId){
   <div id="f-datebox" class="two"><div><label>Empieza</label><input type="datetime-local" id="f-start" value="${toLocalInput(c&&c.start_at)}"></div><div><label>Termina</label><input type="datetime-local" id="f-end" value="${toLocalInput(c&&c.end_at)}"></div></div>
   <div id="f-datehint" class="hint">Deja «Empieza» vacío para publicar de inmediato, o «Termina» vacío si no tiene fecha de fin.</div></div>
   <label>Pantallas</label>
+  <div id="f-tghint" class="hint" style="display:none">Opcional. Elige en qué pantallas se mostrará como respaldo. Si no eliges ninguna, el contenido solo queda guardado en el banco y no se muestra en ninguna pantalla hasta que lo publiques.</div>
   ${S.is_super?`<label class="chk"><input type="radio" name="tg" value="all" ${tgmode==='all'?'checked':''} onchange="tgChanged()"> Todas las pantallas (incluye las que se agreguen después)</label>
   <label class="chk"><input type="radio" name="tg" value="sel" ${tgmode==='sel'?'checked':''} onchange="tgChanged()"> Elegir grupos o pantallas</label>`:`<input type="radio" name="tg" value="sel" checked style="display:none">`}
   <div id="f-tree" class="tree"></div>
@@ -689,7 +690,7 @@ function paintTree(){
   if(!G.length&&!free.length)h='<div class="hint">No hay pantallas aprobadas.</div>';
   const nS=appr.filter(sc=>SEL.s.has(sc.id)||covered(sc)||SEL.o.has('ori:'+sc.orientation)).length;
   h+=[...SEL.o].map(o=>`<span class="badge warn" style="margin:6px 6px 0 0">Todas las ${esc((OGRP[+o.slice(4)]||'').toLowerCase())} <a href="#" onclick="tgOri('${o}');return false" style="text-decoration:none">✕</a></span>`).join('');
-  h+=`<div class="hint" style="margin-top:8px"><b>${nS}</b> pantalla${nS===1?'':'s'} recibirán este contenido${SEL.g.size?' (los grupos marcados incluyen las pantallas que se agreguen después)':''}.</div>`;
+  h+=(nS===0&&useIsFb()&&S.is_super)?`<div class="hint" style="margin-top:8px">Ninguna pantalla elegida: el contenido solo se guardará en el banco.</div>`:`<div class="hint" style="margin-top:8px"><b>${nS}</b> pantalla${nS===1?'':'s'} recibirán este contenido${SEL.g.size?' (los grupos marcados incluyen las pantallas que se agreguen después)':''}.</div>`;
   $('f-tree').innerHTML=h;
   document.querySelectorAll('#f-tree .gcb').forEach(x=>x.indeterminate=x.dataset.ind==='1');
 }
@@ -728,7 +729,7 @@ async function saveContent(id){
     targets:null};
   const tgm=document.querySelector('input[name=tg]:checked').value;
   if(tgm!=='all')body.targets=[...[...SEL.g].map(g=>'grp:'+g),...SEL.s,...SEL.o];
-  if(body.targets&&!body.targets.length){$('err').textContent='Elige al menos un grupo o una pantalla';return}
+  if(body.targets&&!body.targets.length&&!(fb&&S.is_super)){$('err').textContent='Elige al menos un grupo o una pantalla';return}
   btn.disabled=true;
   let ok=0,total=PICKEDS.length;
   try{
