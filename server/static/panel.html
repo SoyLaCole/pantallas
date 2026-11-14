@@ -87,7 +87,16 @@ input:focus,select:focus{outline:2px solid var(--p);border-color:var(--p)}
 .note{background:var(--pl);border-radius:10px;padding:12px 14px;color:#4b3a58;font-size:13px;margin-bottom:14px;line-height:1.5}
 .cell{display:flex;align-items:center;gap:12px}
 .cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px}
-.ccard{padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.ccard{padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0;position:relative}
+.fbcard{position:relative}
+.selbar{margin:0 0 12px;align-items:center;gap:8px;flex-wrap:wrap}
+.selbar b{font-size:13px}
+.selbox{position:absolute;top:8px;left:8px;z-index:2;width:22px;height:22px;border-radius:6px;border:2px solid #b9b2c9;background:#fff;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.selbox svg{display:none}
+.isel .selbox{background:var(--p);border-color:var(--p)}.isel .selbox svg{display:block}
+.isel{outline:3px solid var(--p);outline-offset:-1px}
+.selmode .card:not(.dis){cursor:pointer}.selmode .cact{display:none}
+.card.dis{opacity:.5}
 .ctop{display:flex;gap:10px;min-width:0}
 .cthumb{position:relative;flex:none;width:104px}
 .cthumb .th{width:104px;height:auto;aspect-ratio:16/9;border-radius:8px}
@@ -162,7 +171,7 @@ details.gcard>summary{list-style:none}details.gcard>summary::-webkit-details-mar
 
 <script>
 let S={screens:[],contents:[],now:0};
-const PAGE_VERSION='2.6.1';
+const PAGE_VERSION='2.9.0';
 let TAB='screens';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -196,6 +205,8 @@ function confirmBox(title,msg,okLabel,fn){
   <div class="row" style="margin-top:20px"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" style="background:var(--bad);border-color:var(--bad)" onclick="const f=window._cfn;closeModal();f()">${esc(okLabel)}</button></div>`);
 }
 let GF='';try{GF=localStorage.getItem('gf')||''}catch(e){}
+let OF='';try{OF=localStorage.getItem('of')||''}catch(e){}
+function setOF(v){OF=v;try{localStorage.setItem('of',v)}catch(e){}renderScreens()}
 function setGF(g){GF=g;try{localStorage.setItem('gf',g)}catch(e){}renderScreens()}
 function gName(id){const g=(S.groups||[]).find(x=>x.id===id);return g?g.name:''}
 function gIdx(id){const i=(S.groups||[]).findIndex(x=>x.id===id);return i<0?99:i}
@@ -238,13 +249,17 @@ function renderScreens(){
   const noGrp=all.filter(s=>!inAny(s));
   if(GF&&GF!=='__none'&&!groups.some(g=>g.id===GF))GF='';
   const chip=(g,label,n,on)=>`<button class="chip ${on?'on':''}" onclick="setGF('${g}')">${esc(label)}<i>${n}</i></button>`;
-  const ok=GF===''?all:(GF==='__none'?noGrp:all.filter(s=>(s.groups||[]).includes(GF)));
+  const inG=GF===''?all:(GF==='__none'?noGrp:all.filter(s=>(s.groups||[]).includes(GF)));
+  if(OF!=='on'&&OF!=='off')OF='';
+  const ok=OF===''?inG:inG.filter(s=>OF==='on'?s.online:!s.online);
   ok.sort((a,b)=>(GF===''?sRank(a)-sRank(b):0)||byName(a,b));
   const on=all.filter(s=>s.online).length;
   h+='<h2>Pantallas <span style="font-weight:600;color:var(--mut);font-size:13px">· '+on+' en línea de '+all.length+(S.open_now?'':' · fuera de horario de funcionamiento')+'</span></h2>';
   h+='<div class="chips">'+chip('','Todas',all.length,GF==='')+groups.map(g=>chip(g.id,g.name,all.filter(s=>(s.groups||[]).includes(g.id)).length,GF===g.id)).join('')+(noGrp.length?chip('__none','Sin grupo',noGrp.length,GF==='__none'):'')+'</div>';
+  if(all.length){const nOn=inG.filter(s=>s.online).length,ochip=(v,l,n)=>`<button class="chip ${OF===v?'on':''}" onclick="setOF('${v}')">${l}<i>${n}</i></button>`;
+    h+='<div class="chips">'+ochip('','Todas',inG.length)+ochip('on','Encendidas',nOn)+ochip('off','Apagadas',inG.length-nOn)+'</div>'}
   if(!all.length)h+='<div class="card empty">'+(S.is_super?'Aún no hay pantallas aprobadas.<br>Instala la app en un TV; aparecerá arriba para que la apruebes. Los pasos están en la pestaña Ayuda.':'Todavía no tienes pantallas asignadas. Pídele a comunicaciones@lacole.edu.co que te asigne las que necesitas.')+'</div>';
-  else if(!ok.length)h+='<div class="card empty">No hay pantallas en este grupo todavía.</div>';
+  else if(!ok.length)h+='<div class="card empty">'+(OF==='on'?'No hay pantallas encendidas':OF==='off'?'No hay pantallas apagadas':'No hay pantallas en este grupo todavía.')+(OF&&GF?' en este grupo.':(OF?'.':''))+'</div>';
   else h+='<div class="grid">'+ok.map(s=>{
     const badge=s.online?['ok','En línea']:(S.open_now?['bad','Sin conexión']:['gray','Fuera de horario']);
     const rows=[['Orientación',s.orientation===0?'Horizontal':ORI[s.orientation]||'Vertical'],
@@ -268,13 +283,15 @@ function playlistModal(id){
   const s=S.screens.find(x=>x.id===id),n=S.now;
   const list=playlistOf(s),fb=S.contents.filter(c=>c.fallback&&tHit(c,s));
   const row=(c,i)=>{const st=statusOf(c);const sched=(c.start_at||c.end_at)?(c.start_at?fmt(c.start_at):'Ya')+' → '+(c.end_at?fmt(c.end_at):'sin fin'):'Indefinida';
-    return `<div class="pl"><span class="n">${i?i:''}</span>${thumbHtml(c)}<div style="flex:1;min-width:0"><div class="t">${esc(c.title)}</div><div class="s">${TYPES[c.type]}${c.type==='image'&&c.duration?' · '+c.duration+' s':''} · ${esc(sched)}</div></div><span class="badge ${st[1]}">${st[0]}</span></div>`};
+    return `<div class="pl"><span class="n">${i?i:''}</span>${thumbHtml(c)}<div style="flex:1;min-width:0"><div class="t">${esc(c.title)}</div><div class="s">${TYPES[c.type]}${c.type==='image'&&c.duration?' · '+c.duration+' s':''} · ${esc(sched)}</div></div><span class="badge ${st[1]}">${st[0]}</span>${c.editable?`<button class="btn sm bad" onclick="plDel('${c.id}','${s.id}')">Eliminar</button>`:`<button class="btn sm" title="Publicado por comunicaciones: se quita solo de esta pantalla" onclick="plRemove('${c.id}','${s.id}')">Quitar de esta pantalla</button>`}</div>`};
   openModal(`<h3>Lista de reproducción</h3><div class="s" style="color:var(--mut);margin:-8px 0 8px">${esc(s.name)}${sGroups(s).length?' · '+esc(sGroups(s).join(' · ')):''}</div>
   ${list.length?list.map((c,i)=>row(c,i+1)).join(''):'<div class="hint" style="padding:14px 0">Esta pantalla no tiene contenido programado.</div>'}
   ${fb.length?'<div class="hint" style="margin-top:14px"><b>Respaldo</b> (se muestra solo si no hay nada programado)</div>'+fb.map(c=>row(c,0)).join(''):''}
   <div class="row" style="margin-top:18px"><button class="btn pri" onclick="contentModal(null,null,null,'${s.id}')">+ Agregar contenido a esta pantalla</button><span class="sp"></span><button class="btn" onclick="closeModal()">Cerrar</button></div>`);
   $('modal').classList.add('wide');
 }
+function plDel(cid,sid){const c=S.contents.find(x=>x.id===cid);delBox([c],()=>playlistModal(sid))}
+function plRemove(cid,sid){const c=S.contents.find(x=>x.id===cid),s=S.screens.find(x=>x.id===sid);confirmBox('Quitar de esta pantalla','«'+esc(c.title)+'» dejará de mostrarse en «'+esc(s.name)+'». Seguirá en las demás pantallas donde está publicado.','Quitar',async()=>{try{await api('POST','/api/admin/screens/'+sid+'/contents/'+cid+'/remove',{});await load();playlistModal(sid)}catch(e){toast(e.message)}})}
 async function cmd(id,c){try{await api('POST','/api/admin/screens/'+id+'/cmd',{cmd:c});toast('Reinicio enviado');}catch(e){toast(e.message)}}
 function delScreen(id){const s=S.screens.find(x=>x.id===id);confirmBox('Quitar pantalla','La pantalla «'+esc(s.name)+'» dejará de aparecer en el panel. Si el TV sigue encendido con la app, volverá a aparecer como pantalla nueva.','Quitar',async()=>{await api('DELETE','/api/admin/screens/'+id);load()})}
 
@@ -328,16 +345,48 @@ function thumbHtml(c){
   if(c.thumb)return `<img class="th" alt="" src="/api/admin/contents/${c.id}/thumb?v=${c.thumb}">`;
   return `<div class="th ph">${ICON[c.type]||''}</div>`;
 }
+const SELON={c:false,fb:false},SELIDS=new Set();
+const SELOK='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>';
+function selList(kind){return S.contents.filter(c=>kind==='fb'?c.fallback:!c.fallback)}
+function selCls(kind,c){return SELON[kind]?(c.editable?(SELIDS.has(c.id)?' isel':''):' dis'):''}
+function selBox(kind,c){return SELON[kind]&&c.editable?`<span class="selbox">${SELOK}</span>`:''}
+function selAttr(kind,c){return SELON[kind]&&c.editable?` onclick="selToggle('${c.id}','${kind}',event)"`:''}
+function selBar(kind){
+  const eds=selList(kind).filter(c=>c.editable);if(!eds.length)return '';
+  if(!SELON[kind])return `<div class="row selbar"><button class="btn sm" onclick="selMode('${kind}',true)">Seleccionar varios</button></div>`;
+  const n=SELIDS.size;
+  return `<div class="row selbar"><b>${n} seleccionado${n===1?'':'s'}</b><button class="btn sm" onclick="selAll('${kind}')">Seleccionar todos</button><button class="btn sm" onclick="selNone('${kind}')">Quitar selección</button><span class="sp"></span><button class="btn sm bad" ${n?'':'disabled'} onclick="delSelected('${kind}')">Eliminar${n?' ('+n+')':''}</button><button class="btn sm" onclick="selMode('${kind}',false)">Cancelar</button></div>`}
+function selRender(kind){kind==='fb'?renderFallback():renderContents()}
+function selMode(kind,on){SELON.c=SELON.fb=false;SELIDS.clear();SELON[kind]=on;renderContents();renderFallback()}
+function selToggle(id,kind,e){if(e&&e.target.closest('button,a,input'))return;SELIDS.has(id)?SELIDS.delete(id):SELIDS.add(id);selRender(kind)}
+function selAll(kind){selList(kind).filter(c=>c.editable).forEach(c=>SELIDS.add(c.id));selRender(kind)}
+function selNone(kind){SELIDS.clear();selRender(kind)}
+function delSelected(kind){const cs=selList(kind).filter(c=>SELIDS.has(c.id));if(!cs.length)return;delBox(cs)}
+function delBox(cs,after){
+  const many=cs.length>1,bankOk=cs.every(c=>!c.fallback&&c.type!=='web');
+  const names=many?'<ul style="margin:10px 0 0;padding-left:20px;max-height:200px;overflow:auto">'+cs.slice(0,8).map(c=>'<li>'+esc(c.title)+'</li>').join('')+(cs.length>8?'<li>y '+(cs.length-8)+' más…</li>':'')+'</ul>':'';
+  const ids=cs.map(c=>c.id);
+  window._dbx=async(mode)=>{closeModal();try{
+    if(mode==='bank'){const r=await api('POST','/api/admin/contents/to-bank',{ids});toast(r.moved+' en el banco')}
+    else{const r=await api('POST','/api/admin/contents/delete',{ids});toast(r.deleted+' eliminado'+(r.deleted===1?'':'s'))}
+    SELIDS.clear();Object.keys(SELON).forEach(k=>SELON[k]=false);await load();if(after)after()}catch(e){toast(e.message)}};
+  openModal(`<h3>${many?'Eliminar '+cs.length+' contenidos':'Eliminar contenido'}</h3><div style="font-size:14px;line-height:1.5">${many?'':'«'+esc(cs[0].title)+'» '}${many?'Se borrarán':'se borrará'} también de todas las pantallas donde se muestra${many?'n':''}. No se puede deshacer.${names}
+  ${bankOk?'<div class="hint" style="margin-top:10px">¿No quieres perderlo? Puedes <b>dejarlo en el banco</b>: sale de la programación y queda guardado en «Respaldo y banco» para publicarlo de nuevo cuando quieras.</div>':''}</div>
+  <div class="row" style="margin-top:20px;flex-wrap:wrap"><span class="sp"></span><button class="btn" onclick="closeModal()">Cancelar</button>${bankOk?'<button class="btn pri" onclick="_dbx(\'bank\')">Dejar en el banco</button>':''}<button class="btn pri" style="background:var(--bad);border-color:var(--bad)" onclick="_dbx(\'del\')">Eliminar</button></div>`);
+}
+function selPrune(){[...SELIDS].forEach(i=>{if(!S.contents.some(c=>c.id===i))SELIDS.delete(i)})}
 function renderContents(){
+  selPrune();
   const list=S.contents.filter(c=>!c.fallback),eds=list.filter(c=>c.editable);
   let h=`<div class="drop" id="drop">Arrastra aquí videos o imágenes, o <button class="btn pri sm" onclick="contentModal()">+ Agregar contenido</button></div>`;
-  if(list.length)h+='<div class="hint" style="margin:-4px 0 10px">Para cambiar el orden, arrastra una tarjeta a su nuevo lugar (o usa las flechas).</div>';
+  h+=selBar('c');
+  if(list.length&&!SELON.c)h+='<div class="hint" style="margin:-4px 0 10px">Para cambiar el orden, arrastra una tarjeta a su nuevo lugar (o usa las flechas).</div>';
   if(!list.length)h+='<div class="card empty">No hay contenido todavía.</div>';
-  else h+='<div class="cgrid" id="cgrid">'+list.map((c,i)=>{
+  else h+=`<div class="cgrid${SELON.c?' selmode':''}" id="cgrid">`+list.map((c,i)=>{
     const st=statusOf(c);
     const sched=(c.start_at||c.end_at)?(c.start_at?fmt(c.start_at):'Ya')+' → '+(c.end_at?fmt(c.end_at):'sin fin'):'Indefinida';
     const meta=c.type==='web'?(c.url||''):(c.type==='image'?c.duration+' s':'')+(c.size?(c.type==='image'?' · ':'')+(c.size/1048576).toFixed(1)+' MB':'');
-    return `<div class="card ccard" draggable="${c.editable}" data-ed="${c.editable?1:0}" data-id="${c.id}"><div class="ctop"><div class="cthumb">${thumbHtml(c)}</div>
+    return `<div class="card ccard${selCls('c',c)}" draggable="${c.editable&&!SELON.c}" data-ed="${c.editable&&!SELON.c?1:0}" data-id="${c.id}"${selAttr('c',c)}>${selBox('c',c)}<div class="ctop"><div class="cthumb">${thumbHtml(c)}</div>
     <div class="cbody"><div class="ct" title="${esc(c.title)}">${esc(c.title)}</div>
     <div class="cm">${meta?esc(meta)+(c.interactive?' · interactiva':''):(c.interactive?'Interactiva':'&nbsp;')}</div>
     <div class="cbadges"><span class="badge">${TYPES[c.type]}</span><span class="badge ${st[1]}">${st[0]}</span></div></div></div>
@@ -366,11 +415,12 @@ function wireDnD(g){
   });
 }
 function renderFallback(){
+  selPrune();
   const list=S.contents.filter(c=>c.fallback);
   let h=`<div class="note"><b>Respaldo y banco de contenidos</b><br>Aquí quedan guardados contenidos que no están programados. Mientras estén aquí, sirven de <b>respaldo</b>: una pantalla los muestra cuando no tiene nada programado para ese momento, para que nunca se quede en negro. Y funcionan como un <b>banco</b>: con <b>Publicar</b> sacas una copia a la programación (eligiendo pantallas y fechas) sin volver a subir el archivo, y el original sigue guardado. Para pasar un contenido programado a este banco, edítalo y elige «Respaldo / banco».</div>
-  <div class="row" style="margin-bottom:14px"><button class="btn pri" onclick="contentModal(null,null,'fb')">+ Subir al banco de respaldo</button></div>`;
+  <div class="row" style="margin-bottom:14px"><button class="btn pri" onclick="contentModal(null,null,'fb')">+ Subir al banco de respaldo</button></div>`+selBar('fb');
   if(!list.length)h+='<div class="card empty">Aún no hay contenido de respaldo.</div>';
-  else h+='<div class="fbgrid">'+list.map(c=>`<div class="card fbcard">${thumbHtml(c)}<div style="flex:1;min-width:0">
+  else h+=`<div class="fbgrid${SELON.fb?' selmode':''}">`+list.map(c=>`<div class="card fbcard${selCls('fb',c)}"${selAttr('fb',c)}>${selBox('fb',c)}${thumbHtml(c)}<div style="flex:1;min-width:0">
     <h3>${esc(c.title)}</h3><div class="s" style="font-size:12px;color:var(--mut);margin-bottom:10px"><span class="badge">${TYPES[c.type]}</span> ${esc(targetText(c))}${c.size?' · '+(c.size/1048576).toFixed(1)+' MB':''}</div>
     ${c.editable?`<div class="row"><button class="btn sm pri" onclick="contentModal(null,null,null,null,'${c.id}')" title="Publica una copia en la programación; el original sigue en el banco">Publicar</button><button class="btn sm" onclick="contentModal('${c.id}')">Editar</button><button class="btn sm bad" onclick="delContent('${c.id}')">Eliminar</button></div>`:'<div class="hint" style="margin:0">Solo lectura</div>'}</div></div>`).join('')+'</div>';
   $('v-fallback').innerHTML=h;
@@ -613,7 +663,7 @@ async function backfill(){
   if(any)load();
 }
 async function move(id,dir){await api('POST','/api/admin/contents/'+id+'/move',{dir});load()}
-function delContent(id){const c=S.contents.find(x=>x.id===id);confirmBox('Eliminar contenido','«'+esc(c.title)+'» se borrará también de todas las pantallas donde se muestra.','Eliminar',async()=>{await api('DELETE','/api/admin/contents/'+id);load()})}
+function delContent(id){const c=S.contents.find(x=>x.id===id);delBox([c])}
 
 const ORI_SHORT={0:'horizontal',90:'vertical 90°',270:'vertical 270°',180:'horizontal invertida'};
 let PICKED=null,PICKEDS=[],FBMODE=false,COPYSRC=null,EDITING=false;

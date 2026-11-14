@@ -25,7 +25,7 @@ DB_PATH = os.path.join(DATA_DIR, "pantallas.db")
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
 CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-PANEL_VERSION = "2.6.1"          # subir este número en cada cambio del panel
+PANEL_VERSION = "2.9.0"          # subir este número en cada cambio del panel
 PANEL_BUILD = "2026-10-28"
 START_TS = time.time()           # momento en que arrancó esta versión del servidor (≈ hora del despliegue)
 SUPER_ADMIN = os.environ.get("SUPER_ADMIN", "comunicaciones@lacole.edu.co").strip().lower()
@@ -1073,6 +1073,81 @@ def content_delete(cid):
             pass
     audit(f"contenido eliminado: {r['title']}")
     return jsonify(ok=True)
+
+
+@app.post("/api/admin/screens/<sid>/contents/<cid>/remove")
+@admin_required
+def content_remove_from_screen(sid, cid):
+    """Quita un contenido de UNA pantalla sin borrarlo del resto (sirve para contenido publicado por comunicaciones)."""
+    u = g.user
+    sc = db().execute("SELECT id FROM screens WHERE id=?", (sid,)).fetchone()
+    if not sc:
+        abort(404)
+    ids = scope_ids(u)
+    if ids is not None and sid not in ids:
+        abort(403)
+    r = db().execute("SELECT * FROM contents WHERE id=?", (cid,)).fetchone()
+    if not r or not targets_screen(r, sid):
+        abort(404)
+    try:
+        tg = json.loads(r["targets"]) if r["targets"] else None
+    except Exception:
+        tg = None
+    if tg and sid in tg and not any(isinstance(x, str) and x[:4] in ("grp:", "ori:") for x in tg):
+        new = [x for x in tg if x != sid]
+    else:   # "todas", grupos u orientacion: se expande a pantallas concretas, menos esta
+        new = [x["id"] for x in db().execute("SELECT id FROM screens ORDER BY name") if x["id"] != sid and targets_screen(r, x["id"])]
+    db().execute("UPDATE contents SET targets=? WHERE id=?", (json.dumps(new), cid))
+    db().commit()
+    audit(f"contenido «{r['title']}» quitado de la pantalla {sid}")
+    return jsonify(ok=True)
+
+
+@app.post("/api/admin/contents/to-bank")
+@admin_required
+def content_to_bank():
+    """Saca contenidos de la programacion y los deja guardados en el banco (en lugar de eliminarlos)."""
+    ids = (request.get_json(force=True, silent=True) or {}).get("ids") or []
+    if not isinstance(ids, list) or not ids or len(ids) > 500:
+        return jsonify(error="Lista inválida"), 400
+    ids = list(dict.fromkeys(str(i) for i in ids))
+    rows = [need_editable(i) for i in ids]
+    if any(r["type"] == "web" for r in rows):
+        return jsonify(error="Las páginas web no se pueden guardar en el banco"), 400
+    for r in rows:
+        # comunicaciones: queda sin pantallas (solo banco). Un administrador limitado conserva sus pantallas para no perderlo de vista.
+        tg = "[]" if g.user["super"] else r["targets"]
+        db().execute("UPDATE contents SET fallback=1, start_at=NULL, end_at=NULL, targets=? WHERE id=?", (tg, r["id"]))
+    db().commit()
+    audit(f"{len(rows)} contenidos dejados en el banco: " + ", ".join(r["title"] for r in rows[:10]))
+    return jsonify(ok=True, moved=len(rows))
+
+
+@app.post("/api/admin/contents/delete")
+@admin_required
+def content_delete_many():
+    """Elimina varios contenidos a la vez. Si alguno no se puede (no existe o no es tuyo) no se borra ninguno."""
+    ids = (request.get_json(force=True, silent=True) or {}).get("ids") or []
+    if not isinstance(ids, list) or not ids or len(ids) > 500:
+        return jsonify(error="Lista inválida"), 400
+    ids = list(dict.fromkeys(str(i) for i in ids))
+    rows = [need_editable(i) for i in ids]      # aborta con 403/404 antes de borrar nada
+    for r in rows:
+        db().execute("DELETE FROM contents WHERE id=?", (r["id"],))
+    db().commit()
+    for r in rows:
+        try:
+            os.remove(thumb_path(r["id"]))
+        except OSError:
+            pass
+        # el archivo se borra solo si ningun otro contenido lo sigue usando
+        if r["file"] and not db().execute("SELECT 1 FROM contents WHERE file=? LIMIT 1", (r["file"],)).fetchone():
+            try:
+                os.remove(os.path.join(MEDIA_DIR, os.path.basename(r["file"])))
+            except OSError:
+                pass
+    audit(f"{len(rows)} contenidos eliminados: " + ", ".join(r["title"] for r in rows[:10]) + ("…" if len(rows) > 10 else ""))
+    return jsonify(ok=True, deleted=len(rows))
 
 
 # ---------------------------------------------------------------- Grupos (solo comunicaciones)
