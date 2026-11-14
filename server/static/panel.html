@@ -82,13 +82,15 @@ input:focus,select:focus{outline:2px solid var(--p);border-color:var(--p)}
 .th.ph svg{width:28px;height:28px}
 .fbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
 .fbcard{display:flex;gap:14px;align-items:flex-start}
-.fbcard .th{width:160px;height:90px}
+.fbcard .th{width:130px;height:73px}
 .fbcard h3{margin:0 0 4px;font-size:15px;font-weight:800}
 .note{background:var(--pl);border-radius:10px;padding:12px 14px;color:#4b3a58;font-size:13px;margin-bottom:14px;line-height:1.5}
 .cell{display:flex;align-items:center;gap:12px}
 .cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px}
 .ccard{padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0;position:relative}
 .fbcard{position:relative}
+.fbcard>div{min-width:0;flex:1}.fbcard .row{flex-wrap:wrap}.fbcard .th{flex:none}
+@media(max-width:420px){.fbcard{flex-direction:column}.fbcard .th{width:100%;height:auto;aspect-ratio:16/9}}
 .selbar{margin:0 0 12px;align-items:center;gap:8px;flex-wrap:wrap}
 .selbar b{font-size:13px}
 .selbox{position:absolute;top:8px;left:8px;z-index:2;width:22px;height:22px;border-radius:6px;border:2px solid #b9b2c9;background:#fff;display:flex;align-items:center;justify-content:center;pointer-events:none}
@@ -171,7 +173,7 @@ details.gcard>summary{list-style:none}details.gcard>summary::-webkit-details-mar
 
 <script>
 let S={screens:[],contents:[],now:0};
-const PAGE_VERSION='2.9.0';
+const PAGE_VERSION='2.9.1';
 let TAB='screens';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
