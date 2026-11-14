@@ -89,6 +89,8 @@ input:focus,select:focus{outline:2px solid var(--p);border-color:var(--p)}
 .cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px}
 .ccard{padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0;position:relative}
 .fbcard{position:relative}
+.chips.one{flex-wrap:nowrap;overflow-x:auto;gap:6px;padding-bottom:4px}.chips.one .chip{flex:none;padding-left:10px;padding-right:10px}
+.chipsep{flex:none;width:1px;align-self:stretch;background:var(--bd);margin:2px 4px}
 .fbcard>div{min-width:0;flex:1}.fbcard .row{flex-wrap:wrap}.fbcard .th{flex:none}
 @media(max-width:420px){.fbcard{flex-direction:column}.fbcard .th{width:100%;height:auto;aspect-ratio:16/9}}
 .selbar{margin:0 0 12px;align-items:center;gap:8px;flex-wrap:wrap}
@@ -173,7 +175,7 @@ details.gcard>summary{list-style:none}details.gcard>summary::-webkit-details-mar
 
 <script>
 let S={screens:[],contents:[],now:0};
-const PAGE_VERSION='2.9.1';
+const PAGE_VERSION='2.9.2';
 let TAB='screens';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -257,9 +259,8 @@ function renderScreens(){
   ok.sort((a,b)=>(GF===''?sRank(a)-sRank(b):0)||byName(a,b));
   const on=all.filter(s=>s.online).length;
   h+='<h2>Pantallas <span style="font-weight:600;color:var(--mut);font-size:13px">· '+on+' en línea de '+all.length+(S.open_now?'':' · fuera de horario de funcionamiento')+'</span></h2>';
-  h+='<div class="chips">'+chip('','Todas',all.length,GF==='')+groups.map(g=>chip(g.id,g.name,all.filter(s=>(s.groups||[]).includes(g.id)).length,GF===g.id)).join('')+(noGrp.length?chip('__none','Sin grupo',noGrp.length,GF==='__none'):'')+'</div>';
-  if(all.length){const nOn=inG.filter(s=>s.online).length,ochip=(v,l,n)=>`<button class="chip ${OF===v?'on':''}" onclick="setOF('${v}')">${l}<i>${n}</i></button>`;
-    h+='<div class="chips">'+ochip('','Todas',inG.length)+ochip('on','Encendidas',nOn)+ochip('off','Apagadas',inG.length-nOn)+'</div>'}
+  const nOn=inG.filter(s=>s.online).length,ochip=(v,l,n)=>`<button class="chip ${OF===v?'on':''}" title="Clic de nuevo para quitar el filtro" onclick="setOF(OF==='${v}'?'':'${v}')">${l}<i>${n}</i></button>`;
+  h+='<div class="chips one">'+chip('','Todas',all.length,GF==='')+groups.map(g=>chip(g.id,g.name,all.filter(s=>(s.groups||[]).includes(g.id)).length,GF===g.id)).join('')+(noGrp.length?chip('__none','Sin grupo',noGrp.length,GF==='__none'):'')+(all.length?'<span class="chipsep"></span>'+ochip('on','Encendidas',nOn)+ochip('off','Apagadas',inG.length-nOn):'')+'</div>';
   if(!all.length)h+='<div class="card empty">'+(S.is_super?'Aún no hay pantallas aprobadas.<br>Instala la app en un TV; aparecerá arriba para que la apruebes. Los pasos están en la pestaña Ayuda.':'Todavía no tienes pantallas asignadas. Pídele a comunicaciones@lacole.edu.co que te asigne las que necesitas.')+'</div>';
   else if(!ok.length)h+='<div class="card empty">'+(OF==='on'?'No hay pantallas encendidas':OF==='off'?'No hay pantallas apagadas':'No hay pantallas en este grupo todavía.')+(OF&&GF?' en este grupo.':(OF?'.':''))+'</div>';
   else h+='<div class="grid">'+ok.map(s=>{
